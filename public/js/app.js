@@ -327,9 +327,9 @@ async function loadAdminClubs() {
   if (allClubs.length === 0) await loadAllClubsData();
   const listEl = document.getElementById('adminManageClubList');
   listEl.innerHTML = allClubs.map(c => `
-    <div class="admin-club-item" onclick="openClub('${c.id}')">
-      <div class="club-icon">${escapeHtml(c.name.charAt(0))}</div>
-      <div class="club-info">
+    <div class="admin-club-item" style="position:relative;">
+      <div class="club-icon" onclick="openClub('${c.id}')" style="cursor:pointer;">${escapeHtml(c.name.charAt(0))}</div>
+      <div class="club-info" onclick="openClub('${c.id}')" style="cursor:pointer;flex:1;">
         <div class="club-name">${escapeHtml(c.name)}</div>
         <div class="admin-club-stats">
           <span>${escapeHtml(c.teacher || '未设置')}</span>
@@ -337,9 +337,23 @@ async function loadAdminClubs() {
           <span>PIN: ${c.pin || '未设'}</span>
         </div>
       </div>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gray-300)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      <button class="icon-btn-sm delete" onclick="event.stopPropagation(); deleteClubFromList('${c.id}','${escapeHtml(c.name)}')" title="删除社团" style="flex-shrink:0;margin-left:8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
     </div>
   `).join('');
+}
+
+async function deleteClubFromList(clubId, clubName) {
+  if (!confirm(`确定删除「${clubName}」吗？\n该社团所有学生和考勤记录将被永久清除！`)) return;
+  try {
+    await apiFetch('/api/clubs/' + clubId, { method: 'DELETE' });
+    showToast('已删除');
+    await loadAllClubsData();
+    loadAdminClubs();
+    loadDashboard();
+    loadExportClubs();
+  } catch (e) { showToast('删除失败'); }
 }
 
 async function loadExportClubs() {
@@ -522,6 +536,12 @@ function renderDetail() {
   document.getElementById('exportSingleBtn').style.display = canEdit() ? '' : 'none';
   document.getElementById('menuBtn').style.display = canEdit() ? '' : 'none';
 
+  // 编辑按钮仅在有编辑权限且非编辑模式时显示
+  const editBtn = document.getElementById('editClubBtn');
+  if (editBtn) {
+    editBtn.style.display = (canEdit() && !editMode) ? '' : 'none';
+  }
+
   renderDateList();
   renderStudentManageList();
   updateEditModeUI();
@@ -598,14 +618,21 @@ function showClubMenu() {
   document.getElementById('modal-clubMenu').classList.remove('hidden');
 }
 
-function toggleEditMode() {
+function enterEditMode() {
   if (!canEdit()) { showToast('无编辑权限'); return; }
-  editMode = !editMode;
-  if (!editMode) {
-    saveClubInfo();
-  } else {
-    updateEditModeUI();
+  editMode = true;
+  updateEditModeUI();
+}
+
+function cancelEditMode() {
+  editMode = false;
+  // 恢复输入框为原始值
+  if (currentClub) {
+    document.getElementById('clubNameInput').value = currentClub.name;
+    document.getElementById('clubTeacherInput').value = currentClub.teacher || '';
+    document.getElementById('clubPinInput').value = currentClub.pin || '';
   }
+  updateEditModeUI();
 }
 
 function updateEditModeUI() {
@@ -623,6 +650,13 @@ function updateEditModeUI() {
 
   document.getElementById('importSection').classList.toggle('hidden', !isEditing);
   document.getElementById('studentManageSection').classList.toggle('hidden', !isEditing);
+  document.getElementById('editActions').classList.toggle('hidden', !isEditing);
+
+  // 编辑模式下隐藏"编辑"按钮，非编辑模式且有权限时显示
+  const editBtn = document.getElementById('editClubBtn');
+  if (editBtn) {
+    editBtn.style.display = (!isEditing && canEdit()) ? '' : 'none';
+  }
 }
 
 async function saveClubInfo() {

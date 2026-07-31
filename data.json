@@ -23,13 +23,7 @@
           "name": "王五"
         }
       ],
-      "attendance": {
-        "2026-07-31": {
-          "2024001": "absent",
-          "2024002": "present",
-          "2024003": "late"
-        }
-      }
+      "attendance": {}
     },
     {
       "id": "club_demo2",
@@ -44,36 +38,6 @@
         {
           "id": "2024011",
           "name": "孙七"
-        }
-      ],
-      "attendance": {}
-    },
-    {
-      "id": "club_c6ed5db117cd",
-      "name": "������",
-      "teacher": "����ʦ",
-      "pin": "9566",
-      "students": [
-        {
-          "id": "2024020",
-          "name": "���Լ�"
-        },
-        {
-          "id": "2024021",
-          "name": "������"
-        }
-      ],
-      "attendance": {}
-    },
-    {
-      "id": "club_34904781dd5b",
-      "name": "�鷨��",
-      "teacher": "����ʦ",
-      "pin": "7268",
-      "students": [
-        {
-          "id": "2024022",
-          "name": "���Ա�"
         }
       ],
       "attendance": {}

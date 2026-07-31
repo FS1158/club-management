@@ -149,6 +149,10 @@
 
       <div class="detail-content">
         <div class="card">
+          <div class="attendance-header" id="clubInfoHeader">
+            <h3>社团信息</h3>
+            <button class="btn-small" onclick="enterEditMode()" id="editClubBtn">✏️ 编辑</button>
+          </div>
           <div class="card-row">
             <span class="card-label">社团名称</span>
             <span id="clubNameDisplay" class="card-value"></span>
@@ -168,6 +172,12 @@
             <span class="card-label">学生人数</span>
             <span id="clubStudentCount" class="card-value"></span>
           </div>
+        </div>
+
+        <!-- 编辑模式：保存/取消按钮 -->
+        <div id="editActions" class="card hidden" style="display:flex;gap:10px;padding:16px;">
+          <button class="btn-primary" style="flex:1;" onclick="saveClubInfo()">💾 保存修改</button>
+          <button class="btn-secondary" style="flex:1;" onclick="cancelEditMode()">取消</button>
         </div>
 
         <!-- 编辑模式：导入学生名单 -->
@@ -320,7 +330,7 @@
   <div id="modal-clubMenu" class="modal-overlay hidden" onclick="closeModal('modal-clubMenu', event)">
     <div class="modal">
       <h3>社团操作</h3>
-      <button class="btn-menu" onclick="closeModal('modal-clubMenu'); toggleEditMode()">编辑社团信息</button>
+      <button class="btn-menu" onclick="closeModal('modal-clubMenu'); enterEditMode()">编辑社团信息</button>
       <button class="btn-menu" onclick="closeModal('modal-clubMenu'); showAddStudent()">添加学生</button>
       <button class="btn-menu" onclick="closeModal('modal-clubMenu'); exportSingleClub(currentClubId)">导出考勤报表</button>
       <button class="btn-menu danger" id="deleteClubMenuBtn" onclick="closeModal('modal-clubMenu'); deleteClub()">删除社团</button>
