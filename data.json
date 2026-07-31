@@ -1,0 +1,52 @@
+{
+  "settings": {
+    "appName": "清华附中初中社团考勤管理系统",
+    "adminPassword": "admin123"
+  },
+  "clubs": [
+    {
+      "id": "club_demo1",
+      "name": "篮球社（示例）",
+      "teacher": "张老师",
+      "pin": "1234",
+      "students": [
+        {
+          "id": "2024001",
+          "name": "张三"
+        },
+        {
+          "id": "2024002",
+          "name": "李四"
+        },
+        {
+          "id": "2024003",
+          "name": "王五"
+        }
+      ],
+      "attendance": {
+        "2026-07-31": {
+          "2024001": "absent",
+          "2024002": "present",
+          "2024003": "late"
+        }
+      }
+    },
+    {
+      "id": "club_demo2",
+      "name": "合唱团（示例）",
+      "teacher": "李老师",
+      "pin": "5678",
+      "students": [
+        {
+          "id": "2024010",
+          "name": "赵六"
+        },
+        {
+          "id": "2024011",
+          "name": "孙七"
+        }
+      ],
+      "attendance": {}
+    }
+  ]
+}

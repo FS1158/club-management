@@ -1,0 +1,11 @@
+{
+  "name": "社团考勤管理",
+  "short_name": "社团考勤",
+  "description": "社团考勤管理系统 - 多社团管理、学生名单导入、实时考勤打卡",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#4f6df5",
+  "orientation": "portrait",
+  "icons": []
+}

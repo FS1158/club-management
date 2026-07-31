@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="社团考勤">
+  <meta name="theme-color" content="#660874">
+  <title>清华附中初中社团考勤管理系统</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ========== 登录页 ========== -->
+    <div id="page-login" class="page active">
+      <div class="login-container">
+        <div class="login-logo">
+          <div class="logo-circle">
+            <img src="images/logo.jpg" alt="清华附中校徽" class="school-logo">
+          </div>
+          <h1 class="login-title">清华附中初中</h1>
+          <h2 class="login-subtitle">社团考勤管理系统</h2>
+        </div>
+
+        <div class="login-tabs">
+          <button class="login-tab active" onclick="switchLoginTab('admin')">管理员登录</button>
+          <button class="login-tab" onclick="switchLoginTab('teacher')">社团老师登录</button>
+        </div>
+
+        <!-- 管理员登录 -->
+        <div id="loginAdmin" class="login-form active">
+          <input type="password" id="adminPassword" placeholder="管理员密码" class="login-input">
+          <button class="btn-login" onclick="adminLogin()">进入管理后台</button>
+          <p class="login-hint">默认密码：admin123</p>
+        </div>
+
+        <!-- 教师登录 -->
+        <div id="loginTeacher" class="login-form">
+          <select id="teacherClubSelect" class="login-input" onchange="onClubSelectChange()">
+            <option value="">请选择您的社团</option>
+          </select>
+          <input type="password" id="teacherPin" placeholder="社团PIN码" class="login-input" maxlength="6">
+          <button class="btn-login" onclick="teacherLogin()">进入社团管理</button>
+          <p class="login-hint">PIN码由管理员设置</p>
+        </div>
+
+        <div class="login-divider">
+          <span>或</span>
+        </div>
+        <button class="btn-guest" onclick="guestLogin()">以访客身份查看考勤</button>
+        <button class="btn-guest" onclick="enterSearchPage()" style="margin-top:10px;">🔍 查找学生所在社团</button>
+      </div>
+    </div>
+
+    <!-- ========== 管理员仪表盘 ========== -->
+    <div id="page-admin-dashboard" class="page">
+      <header class="app-header">
+        <h1>管理后台</h1>
+        <button class="btn-icon" onclick="enterSearchPage()" aria-label="查找学生" style="margin-right:4px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button class="btn-icon" onclick="logout()" aria-label="退出">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </header>
+
+      <div class="admin-nav">
+        <button class="admin-nav-btn active" onclick="switchAdminTab('dashboard', this)">仪表盘</button>
+        <button class="admin-nav-btn" onclick="switchAdminTab('clubs', this)">社团管理</button>
+        <button class="admin-nav-btn" onclick="switchAdminTab('export', this)">导出报表</button>
+      </div>
+
+      <div id="adminTab-dashboard" class="admin-tab active">
+        <div id="dashboardStats" class="stats-grid"></div>
+        <div class="card">
+          <h3>各社团概览</h3>
+          <div id="adminClubList" class="admin-club-list"></div>
+        </div>
+      </div>
+
+      <div id="adminTab-clubs" class="admin-tab">
+        <div class="card">
+          <div class="attendance-header">
+            <h3>社团列表</h3>
+            <button class="btn-small" onclick="showAddClub()">+ 新建社团</button>
+          </div>
+          <div id="adminManageClubList"></div>
+        </div>
+      </div>
+
+      <div id="adminTab-export" class="admin-tab">
+        <div class="card">
+          <h3>导出考勤报表</h3>
+          <div class="export-section">
+            <div class="export-card" onclick="exportAllClubs()">
+              <div class="export-icon">📊</div>
+              <div class="export-info">
+                <div class="export-title">一键导出全部社团考勤</div>
+                <div class="export-desc">包含所有社团、所有学生、所有日期的考勤汇总</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div id="exportClubList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 社团详情页（通用） ========== -->
+    <div id="page-detail" class="page">
+      <header class="app-header">
+        <button class="btn-icon" onclick="goBackFromDetail()" aria-label="返回">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h1 id="detailTitle">社团详情</h1>
+        <button class="btn-icon" onclick="enterSearchPage()" aria-label="查找学生" style="margin-right:4px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button class="btn-icon" onclick="showClubMenu()" aria-label="更多" id="menuBtn">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </header>
+
+      <div class="detail-content">
+        <div class="card">
+          <div class="card-row">
+            <span class="card-label">社团名称</span>
+            <span id="clubNameDisplay" class="card-value"></span>
+            <input id="clubNameInput" class="card-input hidden" type="text">
+          </div>
+          <div class="card-row">
+            <span class="card-label">指导老师</span>
+            <span id="clubTeacherDisplay" class="card-value"></span>
+            <input id="clubTeacherInput" class="card-input hidden" type="text">
+          </div>
+          <div class="card-row" id="pinRow">
+            <span class="card-label">PIN码</span>
+            <span id="clubPinDisplay" class="card-value"></span>
+            <input id="clubPinInput" class="card-input hidden" type="text" maxlength="6">
+          </div>
+          <div class="card-row">
+            <span class="card-label">学生人数</span>
+            <span id="clubStudentCount" class="card-value"></span>
+          </div>
+        </div>
+
+        <!-- 编辑模式：导入学生名单 -->
+        <div id="importSection" class="card hidden">
+          <h3>导入学生名单</h3>
+          <p class="hint">粘贴学生数据，每行一条，格式：学号 姓名<br>示例：2024001 张三</p>
+          <textarea id="studentInput" rows="6" placeholder="2024001 张三&#10;2024002 李四"></textarea>
+          <button class="btn-primary" onclick="importStudents()">导入名单</button>
+          <button class="btn-secondary" onclick="clearStudents()">清空名单</button>
+        </div>
+
+        <!-- 学生名单管理（编辑模式） -->
+        <div id="studentManageSection" class="card hidden">
+          <div class="attendance-header">
+            <h3>学生名单</h3>
+            <button class="btn-small" onclick="showAddStudent()">+ 添加</button>
+          </div>
+          <div id="studentManageList"></div>
+        </div>
+
+        <!-- 考勤管理 -->
+        <div class="card">
+          <div class="attendance-header">
+            <h3>考勤记录</h3>
+            <div>
+              <button class="btn-small" onclick="exportSingleClub(currentClubId)" id="exportSingleBtn">导出</button>
+              <button class="btn-small" onclick="showAddDate()" style="margin-left:6px;">+ 日期</button>
+            </div>
+          </div>
+          <div id="dateList" class="date-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 考勤打卡页 ========== -->
+    <div id="page-attendance" class="page">
+      <header class="app-header">
+        <button class="btn-icon" onclick="navigateTo('detail')" aria-label="返回">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h1 id="attendanceDateTitle">考勤</h1>
+        <button class="btn-icon" onclick="deleteAttendanceDate()" id="deleteDateBtn" aria-label="删除">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </header>
+
+      <div class="attendance-content">
+        <div class="attendance-summary" id="attendanceSummary">出勤 0 / 0</div>
+        <div class="search-bar" style="margin:0 0 12px 0;padding:0;">
+          <input type="text" id="attendanceSearchInput" placeholder="搜索学生姓名或学号..." oninput="filterAttendanceStudents()">
+        </div>
+        <div id="attendanceList" class="attendance-list"></div>
+        <div class="attendance-actions">
+          <button class="btn-quick present" onclick="markAll('present')">全勤</button>
+          <button class="btn-quick absent" onclick="markAll('absent')">全缺</button>
+          <button class="btn-quick clear" onclick="markAll(null)">清空</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 访客社团列表页 ========== -->
+    <div id="page-guest" class="page">
+      <header class="app-header">
+        <button class="btn-icon" onclick="navigateTo('login')" aria-label="返回">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h1>社团考勤查看</h1>
+        <button class="btn-icon" onclick="enterSearchPage()" aria-label="查找学生">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+      </header>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="搜索社团名称..." oninput="filterClubs()">
+      </div>
+      <div id="guestClubList" class="club-list"></div>
+    </div>
+
+    <!-- ========== 全局学生搜索页 ========== -->
+    <div id="page-search" class="page">
+      <header class="app-header">
+        <button class="btn-icon" onclick="goBackFromSearch()" aria-label="返回">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h1>查找学生</h1>
+        <div class="btn-icon" style="visibility:hidden;"></div>
+      </header>
+      <div class="search-bar">
+        <input type="text" id="globalSearchInput" placeholder="输入姓名或学号搜索..." oninput="searchStudentsDebounced()">
+      </div>
+      <div id="searchResultSummary" class="search-summary"></div>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </div>
+
+  <!-- ========== 模态框 ========== -->
+  <div id="modal-addClub" class="modal-overlay hidden" onclick="closeModal('modal-addClub', event)">
+    <div class="modal">
+      <h3>新建社团</h3>
+      <input id="newClubName" type="text" placeholder="社团名称">
+      <input id="newClubTeacher" type="text" placeholder="指导老师">
+      <input id="newClubPin" type="text" placeholder="社团PIN码（4-6位数字）" maxlength="6">
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-addClub')">取消</button>
+        <button class="btn-primary" onclick="addClub()">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-addDate" class="modal-overlay hidden" onclick="closeModal('modal-addDate', event)">
+    <div class="modal">
+      <h3>添加考勤日期</h3>
+      <input id="newDateInput" type="date">
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-addDate')">取消</button>
+        <button class="btn-primary" onclick="addDate()">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-addStudent" class="modal-overlay hidden" onclick="closeModal('modal-addStudent', event)">
+    <div class="modal">
+      <h3>添加学生</h3>
+      <input id="newStudentId" type="text" placeholder="学号">
+      <input id="newStudentName" type="text" placeholder="姓名">
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-addStudent')">取消</button>
+        <button class="btn-primary" onclick="addStudent()">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-transfer" class="modal-overlay hidden" onclick="closeModal('modal-transfer', event)">
+    <div class="modal">
+      <h3>调换学生到其他社团</h3>
+      <p id="transferStudentInfo" class="hint"></p>
+      <select id="transferTargetClub" class="login-input"></select>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-transfer')">取消</button>
+        <button class="btn-primary" onclick="transferStudent()">确认调换</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-clubMenu" class="modal-overlay hidden" onclick="closeModal('modal-clubMenu', event)">
+    <div class="modal">
+      <h3>社团操作</h3>
+      <button class="btn-menu" onclick="closeModal('modal-clubMenu'); toggleEditMode()">编辑社团信息</button>
+      <button class="btn-menu" onclick="closeModal('modal-clubMenu'); showAddStudent()">添加学生</button>
+      <button class="btn-menu" onclick="closeModal('modal-clubMenu'); exportSingleClub(currentClubId)">导出考勤报表</button>
+      <button class="btn-menu danger" id="deleteClubMenuBtn" onclick="closeModal('modal-clubMenu'); deleteClub()">删除社团</button>
+      <button class="btn-secondary" onclick="closeModal('modal-clubMenu')" style="margin-top:8px;">取消</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
