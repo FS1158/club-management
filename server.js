@@ -444,10 +444,11 @@ app.delete('/api/clubs/:id/attendance/:date', authMiddleware('teacher'), (req, r
 
 // ============ 管理员专属接口 ============
 
-// 管理员：获取仪表盘统计
+// 管理员：获取仪表盘统计（支持按日期查询）
 app.get('/api/admin/dashboard', authMiddleware('admin'), (req, res) => {
   const data = loadData();
   const clubs = data.clubs;
+  const queryDate = req.query.date; // 可选日期参数 YYYY-MM-DD
   let totalStudents = 0;
   let totalAttendanceRecords = 0;
   let totalPresent = 0;
@@ -471,7 +472,7 @@ app.get('/api/admin/dashboard', authMiddleware('admin'), (req, res) => {
     }
   });
 
-  res.json({
+  const result = {
     clubCount: clubs.length,
     totalStudents,
     totalDates: allDates.size,
@@ -483,7 +484,103 @@ app.get('/api/admin/dashboard', authMiddleware('admin'), (req, res) => {
     attendanceRate: totalAttendanceRecords > 0
       ? (((totalPresent + totalLate) / totalAttendanceRecords) * 100).toFixed(1)
       : '0.0'
+  };
+
+  // 如果指定了日期，返回该日期的详细统计
+  if (queryDate) {
+    let dateTotalStudents = 0, datePresent = 0, dateLate = 0, dateAbsent = 0, dateMarked = 0;
+    const clubBreakdown = [];
+
+    clubs.forEach(c => {
+      const students = c.students || [];
+      const records = (c.attendance || {})[queryDate] || {};
+      let cPresent = 0, cLate = 0, cAbsent = 0;
+      students.forEach(s => {
+        const status = records[s.id];
+        if (status === 'present') { cPresent++; datePresent++; }
+        if (status === 'late') { cLate++; dateLate++; }
+        if (status === 'absent') { cAbsent++; dateAbsent++; }
+      });
+      dateTotalStudents += students.length;
+      dateMarked += cPresent + cLate + cAbsent;
+      if (students.length > 0) {
+        clubBreakdown.push({
+          id: c.id,
+          name: c.name,
+          teacher: c.teacher || '',
+          total: students.length,
+          present: cPresent,
+          late: cLate,
+          absent: cAbsent,
+          unchecked: students.length - cPresent - cLate - cAbsent
+        });
+      }
+    });
+
+    result.dateStats = {
+      date: queryDate,
+      totalStudents: dateTotalStudents,
+      present: datePresent,
+      late: dateLate,
+      absent: dateAbsent,
+      unchecked: dateTotalStudents - dateMarked,
+      marked: dateMarked,
+      attendanceRate: dateTotalStudents > 0
+        ? ((datePresent + dateLate) / dateTotalStudents * 100).toFixed(1)
+        : '0.0',
+      clubBreakdown: clubBreakdown.sort((a, b) => b.present + b.late - a.present - a.late)
+    };
+  }
+
+  res.json(result);
+});
+
+// 管理员：批量导入社团和学生
+app.post('/api/admin/bulk-import', authMiddleware('admin'), (req, res) => {
+  const data = loadData();
+  const { items } = req.body; // [{ clubName, teacher, studentId, studentName }]
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: '数据为空' });
+  }
+
+  let createdClubs = 0, updatedClubs = 0, addedStudents = 0, skipped = 0;
+
+  items.forEach(item => {
+    if (!item.clubName || !item.studentId || !item.studentName) {
+      skipped++;
+      return;
+    }
+    // 按名称查找或创建社团
+    let club = data.clubs.find(c => c.name === item.clubName);
+    if (!club) {
+      club = {
+        id: 'club_' + crypto.randomBytes(6).toString('hex'),
+        name: item.clubName,
+        teacher: item.teacher || '',
+        pin: String(Math.floor(1000 + Math.random() * 9000)),
+        students: [],
+        attendance: {}
+      };
+      data.clubs.push(club);
+      createdClubs++;
+    } else {
+      updatedClubs++;
+      if (item.teacher && !club.teacher) club.teacher = item.teacher;
+    }
+
+    // 添加学生（避免重复）
+    if (!club.students.find(s => s.id === item.studentId)) {
+      club.students.push({ id: item.studentId, name: item.studentName });
+      addedStudents++;
+    } else {
+      skipped++;
+    }
   });
+
+  saveData(data);
+  broadcast({ type: 'bulk_imported' });
+  res.json({ success: true, createdClubs, updatedClubs, addedStudents, skipped });
 });
 
 // 管理员：修改管理员密码

@@ -846,6 +846,58 @@ textarea:focus { border-color: var(--thu-purple); }
 
 .detail-content { padding-bottom: 40px; }
 
+/* ===== 日期选择器 ===== */
+.date-selector-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.date-selector-row input[type="date"] {
+  border: 1px solid var(--thu-purple);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  outline: none;
+  color: var(--thu-purple);
+  font-weight: 600;
+}
+
+/* ===== 文件上传区域 ===== */
+.file-upload-area {
+  border: 2px dashed var(--thu-purple-lighter);
+  border-radius: var(--radius);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--thu-purple-lightest);
+}
+
+.file-upload-area:active {
+  border-color: var(--thu-purple);
+  background: #ede0f2;
+}
+
+.upload-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.upload-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--thu-purple);
+  margin: 0;
+}
+
+.upload-formats {
+  font-size: 12px;
+  color: var(--gray-400);
+  margin: 4px 0 0 0;
+}
+
 /* ===== 全局搜索 ===== */
 .search-summary {
   padding: 4px 16px 12px;

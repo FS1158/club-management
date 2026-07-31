@@ -33,7 +33,7 @@
         <div id="loginAdmin" class="login-form active">
           <input type="password" id="adminPassword" placeholder="管理员密码" class="login-input">
           <button class="btn-login" onclick="adminLogin()">进入管理后台</button>
-          <p class="login-hint">默认密码：admin123</p>
+          <p class="login-hint" style="visibility:hidden;">.</p>
         </div>
 
         <!-- 教师登录 -->
@@ -69,11 +69,19 @@
       <div class="admin-nav">
         <button class="admin-nav-btn active" onclick="switchAdminTab('dashboard', this)">仪表盘</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('clubs', this)">社团管理</button>
+        <button class="admin-nav-btn" onclick="switchAdminTab('import', this)">批量导入</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('export', this)">导出报表</button>
       </div>
 
       <div id="adminTab-dashboard" class="admin-tab active">
+        <div class="card">
+          <div class="date-selector-row">
+            <h3 style="margin:0;">选择考勤日期</h3>
+            <input type="date" id="dashboardDateInput" onchange="onDashboardDateChange()">
+          </div>
+        </div>
         <div id="dashboardStats" class="stats-grid"></div>
+        <div id="dashboardDateStats"></div>
         <div class="card">
           <h3>各社团概览</h3>
           <div id="adminClubList" class="admin-club-list"></div>
@@ -87,6 +95,22 @@
             <button class="btn-small" onclick="showAddClub()">+ 新建社团</button>
           </div>
           <div id="adminManageClubList"></div>
+        </div>
+      </div>
+
+      <div id="adminTab-import" class="admin-tab">
+        <div class="card">
+          <h3>批量导入社团和学生</h3>
+          <p class="hint">一次性导入所有社团和学生名单，系统自动创建社团</p>
+          <div class="file-upload-area" onclick="document.getElementById('bulkFileInput').click()">
+            <div class="upload-icon">📎</div>
+            <p class="upload-text">点击上传文件</p>
+            <p class="upload-formats">支持 CSV / Excel / TXT</p>
+            <input type="file" id="bulkFileInput" accept=".csv,.xlsx,.xls,.txt" style="display:none" onchange="handleBulkFileUpload(event)">
+          </div>
+          <p class="hint" style="margin-top:16px;">或粘贴文本，每行一条：<br>格式：社团名称,指导老师,学号,姓名<br>示例：篮球社,张老师,2024001,张三</p>
+          <textarea id="bulkImportInput" rows="8" placeholder="篮球社,张老师,2024001,张三&#10;篮球社,张老师,2024002,李四&#10;合唱团,李老师,2024003,王五&#10;合唱团,李老师,2024004,赵六"></textarea>
+          <button class="btn-primary" onclick="bulkImport()">一键导入</button>
         </div>
       </div>
 
@@ -149,7 +173,13 @@
         <!-- 编辑模式：导入学生名单 -->
         <div id="importSection" class="card hidden">
           <h3>导入学生名单</h3>
-          <p class="hint">粘贴学生数据，每行一条，格式：学号 姓名<br>示例：2024001 张三</p>
+          <div class="file-upload-area" onclick="document.getElementById('studentFileInput').click()">
+            <div class="upload-icon">📎</div>
+            <p class="upload-text">点击上传文件</p>
+            <p class="upload-formats">支持 CSV / Excel / TXT</p>
+            <input type="file" id="studentFileInput" accept=".csv,.xlsx,.xls,.txt" style="display:none" onchange="handleStudentFileUpload(event)">
+          </div>
+          <p class="hint" style="margin-top:16px;">或粘贴文本，每行一条，格式：学号 姓名<br>示例：2024001 张三</p>
           <textarea id="studentInput" rows="6" placeholder="2024001 张三&#10;2024002 李四"></textarea>
           <button class="btn-primary" onclick="importStudents()">导入名单</button>
           <button class="btn-secondary" onclick="clearStudents()">清空名单</button>
@@ -300,6 +330,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

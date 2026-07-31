@@ -169,6 +169,7 @@ function onClubSelectChange() {}
 // ============ 管理员界面 ============
 
 function enterAdmin() {
+  document.getElementById('dashboardDateInput').value = new Date().toISOString().split('T')[0];
   loadDashboard();
   loadAdminClubs();
   loadExportClubs();
@@ -231,8 +232,89 @@ async function loadDashboard() {
         </div>
       </div>
     `).join('');
+
+    // 加载选中日期的统计
+    await loadDashboardByDate();
   } catch (e) {
     showToast('加载失败');
+  }
+}
+
+async function onDashboardDateChange() {
+  await loadDashboardByDate();
+}
+
+async function loadDashboardByDate() {
+  const date = document.getElementById('dashboardDateInput').value;
+  if (!date) return;
+
+  try {
+    const res = await apiFetch('/api/admin/dashboard?date=' + encodeURIComponent(date));
+    const stats = await res.json();
+
+    if (!stats.dateStats) {
+      document.getElementById('dashboardDateStats').innerHTML = '';
+      return;
+    }
+
+    const ds = stats.dateStats;
+    let html = `
+      <div class="card">
+        <h3>${formatDate(date)} ${getWeekday(date)} 出勤情况</h3>
+        <div class="stats-grid" style="padding:0;">
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--gray-700);">${ds.totalStudents}</div>
+            <div class="stat-label">应到人数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--success);">${ds.present}</div>
+            <div class="stat-label">到勤</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--warning);">${ds.late}</div>
+            <div class="stat-label">迟到</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--danger);">${ds.absent}</div>
+            <div class="stat-label">缺席</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--gray-400);">${ds.unchecked}</div>
+            <div class="stat-label">未标记</div>
+          </div>
+          <div class="stat-card highlight">
+            <div class="stat-value">${ds.attendanceRate}%</div>
+            <div class="stat-label">出勤率</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (ds.clubBreakdown && ds.clubBreakdown.length > 0) {
+      html += `<div class="card"><h3>各社团出勤明细</h3>`;
+      html += ds.clubBreakdown.map(c => `
+        <div class="date-item" style="cursor:pointer;" onclick="openClub('${c.id}')">
+          <div class="date-info">
+            <span class="date-text" style="font-size:14px;">${escapeHtml(c.name)}</span>
+            <span style="font-size:12px;color:var(--gray-400);">${escapeHtml(c.teacher)}</span>
+          </div>
+          <div class="date-info">
+            <span style="font-size:13px;">
+              <span style="color:var(--success);font-weight:600;">${c.present}</span>到
+              <span style="color:var(--warning);font-weight:600;">${c.late}</span>迟
+              <span style="color:var(--danger);font-weight:600;">${c.absent}</span>缺
+              ${c.unchecked > 0 ? `<span style="color:var(--gray-400);">${c.unchecked}未</span>` : ''}
+              <span style="color:var(--gray-400);">/${c.total}</span>
+            </span>
+          </div>
+        </div>
+      `).join('');
+      html += `</div>`;
+    }
+
+    document.getElementById('dashboardDateStats').innerHTML = html;
+  } catch (e) {
+    showToast('加载日期统计失败');
   }
 }
 
@@ -867,6 +949,210 @@ async function exportAllClubs() {
   }
 }
 
+// ============ 批量导入（管理员） ============
+
+async function bulkImport() {
+  const text = document.getElementById('bulkImportInput').value.trim();
+  if (!text) { showToast('请先粘贴或上传数据'); return; }
+
+  const items = parseBulkText(text);
+  if (items.length === 0) { showToast('未识别到有效数据'); return; }
+
+  if (!confirm(`将导入 ${items.length} 条记录，系统会自动创建不存在的社团。确认导入？`)) return;
+
+  try {
+    const res = await apiFetch('/api/admin/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify({ items })
+    });
+    const data = await res.json();
+    if (data.success) {
+      let msg = `导入成功！新建社团 ${data.createdClubs} 个`;
+      if (data.updatedClubs > 0) msg += `，更新 ${data.updatedClubs} 个`;
+      msg += `，添加学生 ${data.addedStudents} 人`;
+      if (data.skipped > 0) msg += `，跳过 ${data.skipped} 条`;
+      showToast(msg, 4000);
+      document.getElementById('bulkImportInput').value = '';
+      await loadAllClubsData();
+      loadDashboard();
+      loadAdminClubs();
+      loadExportClubs();
+    } else {
+      showToast(data.error || '导入失败');
+    }
+  } catch (e) {
+    showToast('导入失败');
+  }
+}
+
+function parseBulkText(text) {
+  const lines = text.trim().split(/\n/).filter(l => l.trim());
+  const items = [];
+  for (const line of lines) {
+    const parts = line.trim().split(/[,，\t\s]+/).filter(p => p);
+    // 支持格式：社团名称,指导老师,学号,姓名（4列）
+    // 或：社团名称,学号,姓名（3列）
+    if (parts.length >= 4) {
+      items.push({ clubName: parts[0], teacher: parts[1], studentId: parts[2], studentName: parts.slice(3).join('') });
+    } else if (parts.length === 3) {
+      items.push({ clubName: parts[0], teacher: '', studentId: parts[1], studentName: parts[2] });
+    }
+  }
+  return items;
+}
+
+async function handleBulkFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const rows = await parseFile(file);
+    if (rows.length === 0) { showToast('文件中未识别到有效数据'); return; }
+
+    // 智能识别列：查找包含"社团"的列、包含"学号"的列、包含"姓名"的列、包含"老师/指导"的列
+    const headers = rows[0] || [];
+    let clubCol = -1, teacherCol = -1, idCol = -1, nameCol = -1;
+
+    headers.forEach((h, i) => {
+      const lower = (h || '').toLowerCase();
+      if (lower.includes('社团') || lower.includes('club') || lower.includes('名称')) clubCol = i;
+      if (lower.includes('老师') || lower.includes('教师') || lower.includes('指导') || lower.includes('teacher')) teacherCol = i;
+      if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
+      if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
+    });
+
+    let items = [];
+    if (clubCol >= 0 && idCol >= 0 && nameCol >= 0) {
+      // 有表头识别
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row[clubCol] && row[idCol] && row[nameCol]) {
+          items.push({
+            clubName: String(row[clubCol]).trim(),
+            teacher: teacherCol >= 0 ? String(row[teacherCol] || '').trim() : '',
+            studentId: String(row[idCol]).trim(),
+            studentName: String(row[nameCol]).trim()
+          });
+        }
+      }
+    } else {
+      // 无表头或无法识别，按列顺序尝试：第1列社团，第2列老师，第3列学号，第4列姓名
+      // 或3列：社团，学号，姓名
+      const startIdx = (headers.some(h => /社团|学号|姓名|老师|teacher|name|id|club/i.test(h || ''))) ? 1 : 0;
+      for (let i = startIdx; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.length >= 4) {
+          items.push({ clubName: String(row[0]).trim(), teacher: String(row[1]).trim(), studentId: String(row[2]).trim(), studentName: String(row[3]).trim() });
+        } else if (row.length === 3) {
+          items.push({ clubName: String(row[0]).trim(), teacher: '', studentId: String(row[1]).trim(), studentName: String(row[2]).trim() });
+        }
+      }
+    }
+
+    if (items.length === 0) { showToast('未识别到有效数据，请检查文件格式'); return; }
+
+    // 填入文本框预览
+    const previewText = items.map(it => `${it.clubName},${it.teacher || ''},${it.studentId},${it.studentName}`).join('\n');
+    document.getElementById('bulkImportInput').value = previewText;
+    showToast(`已解析 ${items.length} 条记录，请检查后点击"一键导入"`, 3000);
+  } catch (e) {
+    showToast('文件解析失败：' + e.message);
+  }
+  event.target.value = '';
+}
+
+// ============ 文件解析工具 ============
+
+async function parseFile(file) {
+  const name = file.name.toLowerCase();
+  const ext = name.split('.').pop();
+
+  if (ext === 'csv' || ext === 'txt') {
+    // CSV / TXT 文本解析
+    const text = await file.text();
+    return parseCSVText(text);
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    // Excel 解析（使用 SheetJS）
+    if (typeof XLSX === 'undefined') {
+      throw new Error('Excel解析库未加载，请刷新页面重试');
+    }
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    return data.map(row => (row || []).map(cell => String(cell).trim()));
+  } else {
+    // 尝试当作文本解析
+    const text = await file.text();
+    return parseCSVText(text);
+  }
+}
+
+function parseCSVText(text) {
+  const lines = text.trim().split(/\n/).filter(l => l.trim());
+  return lines.map(line => {
+    // 先尝试逗号分割
+    if (line.includes(',')) {
+      return line.split(/[,，]/).map(s => s.trim().replace(/^["']|["']$/g, ''));
+    }
+    // 再尝试Tab分割
+    if (line.includes('\t')) {
+      return line.split('\t').map(s => s.trim());
+    }
+    // 最后尝试空格分割（但保留姓名中的空格不分割，只分割前两段）
+    const parts = line.trim().split(/\s+/);
+    return parts;
+  });
+}
+
+// ============ 教师端文件上传导入名单 ============
+
+async function handleStudentFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const rows = await parseFile(file);
+    if (rows.length === 0) { showToast('文件中未识别到有效数据'); return; }
+
+    // 智能识别列
+    const headers = rows[0] || [];
+    let idCol = -1, nameCol = -1;
+
+    headers.forEach((h, i) => {
+      const lower = (h || '').toLowerCase();
+      if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
+      if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
+    });
+
+    let students = [];
+    if (idCol >= 0 && nameCol >= 0) {
+      // 有表头识别
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row[idCol] && row[nameCol]) {
+          students.push(`${String(row[idCol]).trim()} ${String(row[nameCol]).trim()}`);
+        }
+      }
+    } else {
+      // 无表头，尝试前两列：学号 姓名
+      const startIdx = (headers.some(h => /学号|姓名|id|name/i.test(h || ''))) ? 1 : 0;
+      for (let i = startIdx; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.length >= 2) {
+          students.push(`${String(row[0]).trim()} ${String(row[1]).trim()}`);
+        }
+      }
+    }
+
+    if (students.length === 0) { showToast('未识别到有效数据，请检查文件格式'); return; }
+
+    document.getElementById('studentInput').value = students.join('\n');
+    showToast(`已解析 ${students.length} 名学生，请检查后点击"导入名单"`, 3000);
+  } catch (e) {
+    showToast('文件解析失败：' + e.message);
+  }
+  event.target.value = '';
+}
+
 // ============ 添加社团（管理员） ============
 
 function showAddClub() {
@@ -947,6 +1233,9 @@ function handleSSEMessage(msg) {
     }
     if (document.getElementById('page-guest').classList.contains('active')) {
       renderClubList(allClubs, 'guestClubList');
+    }
+    if (msg.type === 'bulk_imported' && document.getElementById('page-admin-dashboard').classList.contains('active')) {
+      loadClubOptions();
     }
   });
 }
