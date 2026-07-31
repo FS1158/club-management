@@ -1308,3 +1308,33 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') teacherLogin();
   });
 });
+
+// ============ 系统设置 ============
+
+async function changeAdminPassword() {
+  const newPwd = document.getElementById('newAdminPassword').value;
+  const confirmPwd = document.getElementById('confirmAdminPassword').value;
+
+  if (!newPwd) { showToast('请输入新密码'); return; }
+  if (newPwd.length < 4) { showToast('密码至少4位'); return; }
+  if (newPwd !== confirmPwd) { showToast('两次输入的密码不一致'); return; }
+
+  try {
+    const res = await apiFetch('/api/admin/password', {
+      method: 'PUT',
+      body: JSON.stringify({ newPassword: newPwd })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('密码修改成功，请重新登录');
+      document.getElementById('newAdminPassword').value = '';
+      document.getElementById('confirmAdminPassword').value = '';
+      setTimeout(() => logout(), 1500);
+    } else {
+      showToast(data.error || '修改失败');
+    }
+  } catch (e) {
+    showToast('修改失败');
+  }
+}
+});

@@ -71,6 +71,7 @@
         <button class="admin-nav-btn" onclick="switchAdminTab('clubs', this)">社团管理</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('import', this)">批量导入</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('export', this)">导出报表</button>
+        <button class="admin-nav-btn" onclick="switchAdminTab('settings', this)">系统设置</button>
       </div>
 
       <div id="adminTab-dashboard" class="admin-tab active">
@@ -128,6 +129,16 @@
             </div>
             <div id="exportClubList"></div>
           </div>
+        </div>
+      </div>
+
+      <div id="adminTab-settings" class="admin-tab">
+        <div class="card">
+          <h3>修改管理员密码</h3>
+          <p class="hint">修改后需用新密码重新登录</p>
+          <input type="password" id="newAdminPassword" placeholder="输入新密码（至少4位）" class="login-input" style="margin-bottom:8px;">
+          <input type="password" id="confirmAdminPassword" placeholder="再次输入新密码" class="login-input" style="margin-bottom:12px;">
+          <button class="btn-primary" onclick="changeAdminPassword()">确认修改</button>
         </div>
       </div>
     </div>
