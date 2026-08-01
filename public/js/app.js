@@ -172,8 +172,10 @@ function onClubSelectChange() {}
 
 // ============ 管理员界面 ============
 
+let dashboardDate = '';
+
 function enterAdmin() {
-  document.getElementById('dashboardDateInput').value = new Date().toISOString().split('T')[0];
+  dashboardDate = new Date().toISOString().split('T')[0];
   loadDashboard();
   loadAdminClubs();
   loadExportClubs();
@@ -194,29 +196,38 @@ async function loadDashboard() {
     const stats = await res.json();
 
     document.getElementById('dashboardStats').innerHTML = `
-      <div class="stat-card highlight">
-        <div class="stat-value">${stats.clubCount}</div>
-        <div class="stat-label">社团总数</div>
-      </div>
-      <div class="stat-card highlight">
-        <div class="stat-value">${stats.totalStudents}</div>
-        <div class="stat-label">学生总数</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--success);">${stats.totalPresent}</div>
-        <div class="stat-label">到勤人次</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--danger);">${stats.totalAbsent}</div>
-        <div class="stat-label">缺席人次</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--warning);">${stats.totalLate}</div>
-        <div class="stat-label">迟到人次</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color:var(--thu-purple);">${stats.attendanceRate}%</div>
-        <div class="stat-label">总体出勤率</div>
+      <div class="card compact-overview">
+        <div class="compact-overview-row">
+          <div class="compact-stat">
+            <span class="compact-val">${stats.clubCount}</span>
+            <span class="compact-label">社团</span>
+          </div>
+          <div class="compact-divider"></div>
+          <div class="compact-stat">
+            <span class="compact-val">${stats.totalStudents}</span>
+            <span class="compact-label">学生</span>
+          </div>
+          <div class="compact-divider"></div>
+          <div class="compact-stat">
+            <span class="compact-val" style="color:var(--success);">${stats.totalPresent}</span>
+            <span class="compact-label">到勤</span>
+          </div>
+          <div class="compact-divider"></div>
+          <div class="compact-stat">
+            <span class="compact-val" style="color:var(--warning);">${stats.totalLate}</span>
+            <span class="compact-label">迟到</span>
+          </div>
+          <div class="compact-divider"></div>
+          <div class="compact-stat">
+            <span class="compact-val" style="color:var(--danger);">${stats.totalAbsent}</span>
+            <span class="compact-label">缺席</span>
+          </div>
+          <div class="compact-divider"></div>
+          <div class="compact-stat">
+            <span class="compact-val" style="color:var(--thu-purple);">${stats.attendanceRate}%</span>
+            <span class="compact-label">出勤率</span>
+          </div>
+        </div>
       </div>
     `;
 
@@ -235,6 +246,7 @@ async function loadDashboard() {
 }
 
 async function onDashboardDateChange() {
+  dashboardDate = document.getElementById('dashboardDateInput').value;
   await loadDashboardByDate();
 }
 
@@ -426,11 +438,10 @@ async function showOverallAttendanceDetail(status) {
 }
 
 async function loadDashboardByDate() {
-  const date = document.getElementById('dashboardDateInput').value;
-  if (!date) return;
+  if (!dashboardDate) return;
 
   try {
-    const res = await apiFetch('/api/admin/dashboard?date=' + encodeURIComponent(date));
+    const res = await apiFetch('/api/admin/dashboard?date=' + encodeURIComponent(dashboardDate));
     const stats = await res.json();
 
     if (!stats.dateStats) {
@@ -441,8 +452,11 @@ async function loadDashboardByDate() {
     const ds = stats.dateStats;
     let html = `
       <div class="card">
-        <h3>${formatDate(date)} ${getWeekday(date)} 出勤情况</h3>
-        <p class="hint" style="margin-bottom:10px;">点击下方数字查看对应学生名单</p>
+        <div class="date-selector-row" style="margin-bottom:12px;">
+          <h3 style="margin:0;font-size:15px;">出勤情况</h3>
+          <input type="date" id="dashboardDateInput" value="${dashboardDate}" onchange="onDashboardDateChange()">
+        </div>
+        <p class="hint" style="margin-bottom:8px;font-size:12px;">${formatDate(dashboardDate)} ${getWeekday(dashboardDate)} · 点击数字查看学生名单</p>
         <div class="stats-grid" style="padding:0;">
           <div class="stat-card clickable-stat" onclick="showOverallAttendanceDetail('all')">
             <div class="stat-value" style="color:var(--gray-700);">${ds.totalStudents}</div>
