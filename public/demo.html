@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清华附中社团考勤系统 - 使用演示</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+:root {
+  --thu-purple:#660874; --thu-purple-light:#8B2F9E; --thu-purple-lightest:#F5EBF8;
+  --thu-gradient:linear-gradient(135deg,#660874,#8B2F9E);
+  --success:#22c55e; --danger:#ef4444; --warning:#f59e0b;
+  --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-700:#374151; --gray-800:#1f2937;
+}
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:#f0f0f5; color:#1f2937; display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding:20px; }
+.demo-wrap { display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; justify-content:center; }
+
+/* 手机模拟框 */
+.phone {
+  width:375px; height:720px; background:#fff; border-radius:36px; border:8px solid #1a1a1a;
+  box-shadow:0 8px 40px rgba(0,0,0,0.15); overflow:hidden; position:relative; flex-shrink:0;
+}
+.phone-notch { position:absolute; top:0; left:50%; transform:translateX(-50%); width:150px; height:24px; background:#1a1a1a; border-radius:0 0 16px 16px; z-index:100; }
+.phone-screen { width:100%; height:100%; overflow:hidden; position:relative; background:#fff; }
+
+/* 模拟界面通用样式 */
+.sim-page { width:100%; height:100%; display:flex; flex-direction:column; }
+.sim-header { background:var(--thu-gradient); color:#fff; padding:40px 16px 12px; display:flex; align-items:center; justify-content:space-between; }
+.sim-header h1 { font-size:18px; font-weight:600; }
+.sim-body { flex:1; overflow-y:auto; padding:12px; }
+.sim-card { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:14px; margin-bottom:12px; }
+.sim-tab-bar { display:flex; border-bottom:2px solid var(--gray-200); padding:0 4px; background:#fff; }
+.sim-tab { padding:10px 14px; font-size:12px; color:var(--gray-500); border-bottom:2px solid transparent; margin-bottom:-2px; }
+.sim-tab.active { color:var(--thu-purple); border-bottom-color:var(--thu-purple); font-weight:600; }
+.sim-input { width:100%; height:44px; border:1px solid var(--gray-300); border-radius:8px; padding:0 12px; font-size:14px; outline:none; }
+.sim-input:focus { border-color:var(--thu-purple); }
+.sim-btn { height:44px; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; width:100%; }
+.sim-btn-primary { background:var(--thu-gradient); color:#fff; }
+
+/* 解说面板 */
+.narration { width:360px; flex-shrink:0; }
+.narration-card { background:#fff; border-radius:16px; padding:24px; box-shadow:0 4px 20px rgba(0,0,0,0.08); }
+.narration-title { font-size:18px; font-weight:600; color:var(--thu-purple); margin-bottom:12px; }
+.narration-text { font-size:15px; line-height:1.8; color:var(--gray-700); min-height:120px; }
+.narration-step { display:inline-block; background:var(--thu-purple-lightest); color:var(--thu-purple); font-size:12px; padding:3px 10px; border-radius:20px; margin-bottom:12px; font-weight:600; }
+.progress-bar { width:100%; height:6px; background:var(--gray-200); border-radius:3px; margin-top:16px; overflow:hidden; }
+.progress-fill { height:100%; background:var(--thu-gradient); border-radius:3px; transition:width 0.3s; }
+.progress-dots { display:flex; gap:6px; margin-top:10px; }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--gray-300); }
+.dot.done { background:var(--thu-purple-light); }
+.dot.current { background:var(--thu-purple); width:24px; border-radius:4px; }
+
+/* 控制按钮 */
+.controls { display:flex; gap:10px; margin-top:16px; }
+.ctrl-btn { flex:1; height:44px; border:1px solid var(--gray-300); border-radius:8px; background:#fff; font-size:14px; color:var(--gray-700); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s; }
+.ctrl-btn:hover { border-color:var(--thu-purple); color:var(--thu-purple); }
+.ctrl-btn.primary { background:var(--thu-gradient); color:#fff; border:none; }
+
+/* 动画效果 */
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.fade-in { animation:fadeIn 0.4s ease; }
+@keyframes typing { from{opacity:0} to{opacity:1} }
+@keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.05)} 100%{transform:scale(1)} }
+.pulse { animation:pulse 0.3s ease; }
+@keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+.slide-in { animation:slideIn 0.3s ease; }
+@keyframes typingCursor { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+.cursor::after { content:'|'; animation:typingCursor 0.8s infinite; color:var(--thu-purple); }
+
+/* 统计卡片 */
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+.stat-item { background:var(--thu-purple-lightest); border-radius:10px; padding:12px; text-align:center; }
+.stat-num { font-size:24px; font-weight:700; color:var(--thu-purple); }
+.stat-label { font-size:11px; color:var(--gray-500); margin-top:2px; }
+
+/* 学生列表 */
+.student-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--gray-100); }
+.student-info { display:flex; align-items:center; gap:8px; }
+.student-avatar { width:32px; height:32px; border-radius:50%; background:var(--thu-purple-lightest); display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--thu-purple); font-weight:600; }
+.student-name { font-size:14px; }
+.student-id { font-size:11px; color:var(--gray-400); }
+.att-btns { display:flex; gap:4px; }
+.att-btn { padding:4px 10px; border-radius:6px; font-size:12px; border:1px solid var(--gray-300); background:#fff; cursor:pointer; }
+.att-btn.on-present { background:var(--success); color:#fff; border-color:var(--success); }
+.att-btn.on-late { background:var(--warning); color:#fff; border-color:var(--warning); }
+.att-btn.on-absent { background:var(--danger); color:#fff; border-color:var(--danger); }
+
+/* 社团项 */
+.club-item { display:flex; align-items:center; justify-content:space-between; padding:12px; border:1px solid var(--gray-200); border-radius:10px; margin-bottom:8px; }
+
+/* 导出卡片 */
+.export-card { display:flex; align-items:center; gap:12px; padding:16px; border:1px solid var(--gray-200); border-radius:12px; cursor:pointer; margin-bottom:8px; }
+.export-icon { width:48px; height:48px; border-radius:12px; background:var(--thu-purple-lightest); display:flex; align-items:center; justify-content:center; font-size:24px; }
+
+/* 搜索框 */
+.search-box { display:flex; align-items:center; gap:8px; background:var(--gray-100); border-radius:10px; padding:8px 12px; margin-bottom:12px; }
+
+/* 校徽 */
+.school-logo { width:56px; height:56px; border-radius:50%; background:var(--thu-purple-lightest); display:flex; align-items:center; justify-content:center; margin:0 auto 8px; font-size:28px; }
+
+@media(max-width:820px){
+  .demo-wrap{flex-direction:column;align-items:center}
+  .narration{width:375px}
+}
+</style>
+</head>
+<body>
+<div class="demo-wrap">
+  <!-- 手机模拟框 -->
+  <div class="phone">
+    <div class="phone-notch"></div>
+    <div class="phone-screen" id="screen"></div>
+  </div>
+
+  <!-- 解说面板 -->
+  <div class="narration">
+    <div class="narration-card">
+      <span class="narration-step" id="stepBadge">步骤 1 / 9</span>
+      <div class="narration-title" id="stepTitle">系统首页</div>
+      <div class="narration-text" id="stepText"></div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:11%"></div></div>
+      <div class="progress-dots" id="progressDots"></div>
+      <div class="controls">
+        <button class="ctrl-btn" onclick="prevStep()">上一步</button>
+        <button class="ctrl-btn primary" onclick="togglePlay()" id="playBtn">暂停</button>
+        <button class="ctrl-btn" onclick="nextStep()">下一步</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DURATION = 6000; // 每步停留时间
+
+const steps = [
+  // 1. 首页
+  {
+    title: '系统首页',
+    text: '欢迎来到清华附中初中社团考勤管理系统。打开系统首先看到首页，展示校徽和系统名称。页面下方提供管理员登录和教师登录两种方式，还支持访客免登录浏览社团列表。点击右上角搜索图标可全局查找学生。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-body" style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;">
+          <div class="school-logo">🎓</div>
+          <h1 style="font-size:18px;color:var(--thu-purple);text-align:center;margin-bottom:4px;">清华附中</h1>
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:24px;">初中社团考勤管理系统</p>
+          <div style="width:100%;max-width:280px;">
+            <div class="sim-tab-bar" style="margin-bottom:16px;">
+              <div class="sim-tab active" style="flex:1;text-align:center;">管理员登录</div>
+              <div class="sim-tab" style="flex:1;text-align:center;">教师登录</div>
+            </div>
+            <input class="sim-input fade-in" placeholder="管理员密码" style="margin-bottom:12px;" type="password" value="admin123">
+            <button class="sim-btn sim-btn-primary fade-in">进入管理后台</button>
+          </div>
+          <p style="font-size:12px;color:var(--gray-400);margin-top:16px;">访客可查看社团列表</p>
+        </div>
+      </div>`
+  },
+  // 2. 管理员登录
+  {
+    title: '管理员登录',
+    text: '管理员在首页输入密码（默认 admin123），点击「进入管理后台」即可登录。登录后进入管理后台首页，底部导航栏有仪表盘、社团管理、批量导入、导出报表、系统设置五个功能模块。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>管理后台</h1>
+          <div style="font-size:20px;">🔍</div>
+        </div>
+        <div class="sim-tab-bar">
+          <div class="sim-tab active">仪表盘</div>
+          <div class="sim-tab">社团管理</div>
+          <div class="sim-tab">批量导入</div>
+          <div class="sim-tab">导出报表</div>
+          <div class="sim-tab">系统设置</div>
+        </div>
+        <div class="sim-body">
+          <div class="sim-card fade-in">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <h3 style="font-size:14px;">选择考勤日期</h3>
+              <input type="date" style="border:1px solid var(--gray-300);border-radius:6px;padding:4px 8px;font-size:12px;" value="2026-07-31">
+            </div>
+          </div>
+          <div class="stat-grid fade-in">
+            <div class="stat-item"><div class="stat-num">42</div><div class="stat-label">社团总数</div></div>
+            <div class="stat-item"><div class="stat-num">1280</div><div class="stat-label">学生总数</div></div>
+            <div class="stat-item"><div class="stat-num">96.5%</div><div class="stat-label">出勤率</div></div>
+            <div class="stat-item"><div class="stat-num">15</div><div class="stat-label">考勤天数</div></div>
+          </div>
+          <div class="sim-card fade-in"><h3 style="font-size:13px;margin-bottom:8px;">各社团概览</h3>
+            <div class="club-item slide-in"><div><div style="font-size:13px;font-weight:600;">篮球社</div><div style="font-size:11px;color:var(--gray-400);">张老师 · 32人</div></div><div style="font-size:12px;color:var(--success);">98%到勤</div></div>
+            <div class="club-item slide-in"><div><div style="font-size:13px;font-weight:600;">合唱团</div><div style="font-size:11px;color:var(--gray-400);">李老师 · 28人</div></div><div style="font-size:12px;color:var(--success);">95%到勤</div></div>
+          </div>
+        </div>
+      </div>`
+  },
+  // 3. 社团管理
+  {
+    title: '社团管理',
+    text: '在「社团管理」页面，管理员可以新建社团、编辑社团信息（名称、指导教师、PIN码）、删除社团。每个社团右侧有删除按钮，点击社团名称可进入详情页管理学生名单。新建社团只需填写名称、教师和4位PIN码即可。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>管理后台</h1><div style="font-size:20px;">🔍</div></div>
+        <div class="sim-tab-bar">
+          <div class="sim-tab">仪表盘</div>
+          <div class="sim-tab active">社团管理</div>
+          <div class="sim-tab">批量导入</div>
+          <div class="sim-tab">导出报表</div>
+          <div class="sim-tab">系统设置</div>
+        </div>
+        <div class="sim-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="font-size:14px;">社团列表（42个）</h3>
+            <button class="sim-btn sim-btn-primary" style="width:auto;padding:6px 14px;font-size:13px;height:32px;">+ 新建社团</button>
+          </div>
+          <div class="sim-card fade-in" style="padding:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div><div style="font-size:14px;font-weight:600;">篮球社</div><div style="font-size:11px;color:var(--gray-400);">张老师 · 32人 · PIN: 1234</div></div>
+              <div style="display:flex;gap:6px;"><span style="font-size:12px;color:var(--thu-purple);">编辑</span><span style="font-size:12px;color:var(--danger);">删除</span></div>
+            </div>
+          </div>
+          <div class="sim-card fade-in" style="padding:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div><div style="font-size:14px;font-weight:600;">合唱团</div><div style="font-size:11px;color:var(--gray-400);">李老师 · 28人 · PIN: 5678</div></div>
+              <div style="display:flex;gap:6px;"><span style="font-size:12px;color:var(--thu-purple);">编辑</span><span style="font-size:12px;color:var(--danger);">删除</span></div>
+            </div>
+          </div>
+          <div class="sim-card fade-in" style="padding:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div><div style="font-size:14px;font-weight:600;">机器人社</div><div style="font-size:11px;color:var(--gray-400);">王老师 · 25人 · PIN: 2468</div></div>
+              <div style="display:flex;gap:6px;"><span style="font-size:12px;color:var(--thu-purple);">编辑</span><span style="font-size:12px;color:var(--danger);">删除</span></div>
+            </div>
+          </div>
+          <div class="sim-card fade-in" style="padding:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div><div style="font-size:14px;font-weight:600;">美术社</div><div style="font-size:11px;color:var(--gray-400);">赵老师 · 30人 · PIN: 1357</div></div>
+              <div style="display:flex;gap:6px;"><span style="font-size:12px;color:var(--thu-purple);">编辑</span><span style="font-size:12px;color:var(--danger);">删除</span></div>
+            </div>
+          </div>
+        </div>
+      </div>`
+  },
+  // 4. 批量导入
+  {
+    title: '批量导入',
+    text: '管理员可以在「批量导入」页面一次性导入所有社团和学生名单。支持粘贴文本（每行格式：社团名称,老师,学号,姓名），也可以上传 CSV、Excel、TXT 文件，系统自动识别表头列。导入后自动创建不存在的社团，更新已存在的社团学生名单。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>管理后台</h1><div style="font-size:20px;">🔍</div></div>
+        <div class="sim-tab-bar">
+          <div class="sim-tab">仪表盘</div>
+          <div class="sim-tab">社团管理</div>
+          <div class="sim-tab active">批量导入</div>
+          <div class="sim-tab">导出报表</div>
+          <div class="sim-tab">系统设置</div>
+        </div>
+        <div class="sim-body">
+          <div class="sim-card fade-in">
+            <h3 style="font-size:14px;margin-bottom:8px;">批量导入社团和学生</h3>
+            <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">一次性导入所有社团和学生名单，系统自动创建社团</p>
+            <div style="border:2px dashed var(--gray-300);border-radius:12px;padding:24px;text-align:center;margin-bottom:12px;">
+              <div style="font-size:28px;">📎</div>
+              <p style="font-size:13px;margin-top:4px;">点击上传文件</p>
+              <p style="font-size:11px;color:var(--gray-400);">支持 CSV / Excel / TXT</p>
+            </div>
+            <p style="font-size:11px;color:var(--gray-400);margin-bottom:8px;">或粘贴文本，每行一条：<br>格式：社团名称,指导老师,学号,姓名</p>
+            <textarea style="width:100%;border:1px solid var(--gray-300);border-radius:8px;padding:8px;font-size:12px;height:80px;resize:none;" readonly>篮球社,张老师,2024001,张三
+篮球社,张老师,2024002,李四
+合唱团,李老师,2024003,王五
+合唱团,李老师,2024004,赵六</textarea>
+            <button class="sim-btn sim-btn-primary pulse" style="margin-top:8px;">一键导入</button>
+          </div>
+        </div>
+      </div>`
+  },
+  // 5. 教师登录
+  {
+    title: '教师登录',
+    text: '教师登录需要选择自己的社团，输入4位PIN码。PIN码由管理员创建社团时设置，默认1234。登录后只能管理自己社团的学生名单和考勤，无法查看或修改其他社团。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-body" style="display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;">
+          <div class="school-logo">🎓</div>
+          <h1 style="font-size:18px;color:var(--thu-purple);text-align:center;margin-bottom:4px;">清华附中</h1>
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:24px;">初中社团考勤管理系统</p>
+          <div style="width:100%;max-width:280px;">
+            <div class="sim-tab-bar" style="margin-bottom:16px;">
+              <div class="sim-tab" style="flex:1;text-align:center;">管理员登录</div>
+              <div class="sim-tab active" style="flex:1;text-align:center;">教师登录</div>
+            </div>
+            <select class="sim-input fade-in" style="margin-bottom:12px;">
+              <option>请选择社团</option>
+              <option selected>篮球社</option>
+              <option>合唱团</option>
+              <option>机器人社</option>
+            </select>
+            <input class="sim-input fade-in" placeholder="社团PIN码" style="margin-bottom:12px;text-align:center;letter-spacing:8px;" value="1234" maxlength="4">
+            <button class="sim-btn sim-btn-primary fade-in">进入社团管理</button>
+          </div>
+          <p style="font-size:12px;color:var(--gray-400);margin-top:16px;">PIN码由管理员设置</p>
+        </div>
+      </div>`
+  },
+  // 6. 考勤打卡
+  {
+    title: '考勤打卡',
+    text: '这是核心功能——考勤打卡。教师选择日期后，逐个勾选每位学生的出勤状态：到勤（绿）、迟到（橙）、缺席（红）。页面顶部有搜索框，可按姓名或学号快速定位学生。勾选后自动保存，其他登录的设备实时同步更新。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>篮球社考勤</h1><div style="font-size:20px;">🔍</div></div>
+        <div class="sim-body">
+          <div class="search-box fade-in">
+            <span style="font-size:14px;color:var(--gray-400);">🔍</span>
+            <input style="border:none;background:transparent;flex:1;font-size:13px;outline:none;" placeholder="搜索学生姓名或学号...">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <span style="font-size:13px;color:var(--gray-500);">日期：</span>
+            <input type="date" style="border:1px solid var(--gray-300);border-radius:6px;padding:4px 8px;font-size:12px;" value="2026-07-31">
+          </div>
+          <div class="sim-card fade-in" style="padding:8px 12px;">
+            <div class="student-row"><div class="student-info"><div class="student-avatar">张</div><div><div class="student-name">张三</div><div class="student-id">2024001</div></div></div><div class="att-btns"><button class="att-btn on-present">到勤</button><button class="att-btn">迟到</button><button class="att-btn">缺席</button></div></div>
+          </div>
+          <div class="sim-card fade-in" style="padding:8px 12px;">
+            <div class="student-row"><div class="student-info"><div class="student-avatar">李</div><div><div class="student-name">李四</div><div class="student-id">2024002</div></div></div><div class="att-btns"><button class="att-btn on-present">到勤</button><button class="att-btn">迟到</button><button class="att-btn">缺席</button></div></div>
+          </div>
+          <div class="sim-card fade-in" style="padding:8px 12px;">
+            <div class="student-row"><div class="student-info"><div class="student-avatar">王</div><div><div class="student-name">王五</div><div class="student-id">2024003</div></div></div><div class="att-btns"><button class="att-btn">到勤</button><button class="att-btn on-late">迟到</button><button class="att-btn">缺席</button></div></div>
+          </div>
+          <div class="sim-card fade-in" style="padding:8px 12px;">
+            <div class="student-row"><div class="student-info"><div class="student-avatar">赵</div><div><div class="student-name">赵六</div><div class="student-id">2024004</div></div></div><div class="att-btns"><button class="att-btn">到勤</button><button class="att-btn">迟到</button><button class="att-btn on-absent">缺席</button></div></div>
+          </div>
+          <div class="sim-card fade-in" style="padding:8px 12px;">
+            <div class="student-row"><div class="student-info"><div class="student-avatar">孙</div><div><div class="student-name">孙七</div><div class="student-id">2024005</div></div></div><div class="att-btns"><button class="att-btn on-present">到勤</button><button class="att-btn">迟到</button><button class="att-btn">缺席</button></div></div>
+          </div>
+        </div>
+      </div>`
+  },
+  // 7. 导出报表
+  {
+    title: '导出报表',
+    text: '管理员可以在「导出报表」页面一键导出所有社团的考勤汇总表。导出的是 CSV 文件（带 UTF-8 BOM，Excel 直接打开不乱码），包含汇总表和各社团考勤率统计。也可以单独导出某个社团的明细报表。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>管理后台</h1><div style="font-size:20px;">🔍</div></div>
+        <div class="sim-tab-bar">
+          <div class="sim-tab">仪表盘</div>
+          <div class="sim-tab">社团管理</div>
+          <div class="sim-tab">批量导入</div>
+          <div class="sim-tab active">导出报表</div>
+          <div class="sim-tab">系统设置</div>
+        </div>
+        <div class="sim-body">
+          <div class="sim-card fade-in">
+            <h3 style="font-size:14px;margin-bottom:12px;">导出考勤报表</h3>
+            <div class="export-card pulse">
+              <div class="export-icon">📊</div>
+              <div style="flex:1;"><div style="font-size:14px;font-weight:600;">一键导出全部社团考勤</div><div style="font-size:12px;color:var(--gray-400);">包含所有社团、所有学生、所有日期的考勤汇总</div></div>
+              <div style="font-size:18px;color:var(--thu-purple);">›</div>
+            </div>
+            <div class="export-card fade-in"><div class="export-icon">📄</div><div style="flex:1;"><div style="font-size:13px;">篮球社考勤明细</div><div style="font-size:11px;color:var(--gray-400);">32人 · 15天</div></div><div style="font-size:16px;color:var(--gray-400);">›</div></div>
+            <div class="export-card fade-in"><div class="export-icon">📄</div><div style="flex:1;"><div style="font-size:13px;">合唱团考勤明细</div><div style="font-size:11px;color:var(--gray-400);">28人 · 15天</div></div><div style="font-size:16px;color:var(--gray-400);">›</div></div>
+            <div class="export-card fade-in"><div class="export-icon">📄</div><div style="flex:1;"><div style="font-size:13px;">机器人社考勤明细</div><div style="font-size:11px;color:var(--gray-400);">25人 · 15天</div></div><div style="font-size:16px;color:var(--gray-400);">›</div></div>
+          </div>
+        </div>
+      </div>`
+  },
+  // 8. 全局搜索
+  {
+    title: '全局搜索',
+    text: '在任意页面点击搜索图标，输入学生姓名或学号，可以快速查找学生在哪个社团。搜索结果展示学生姓名、学号、所在社团和指导教师，方便管理员快速定位学生信息。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>查找学生</h1><div style="font-size:20px;">✕</div></div>
+        <div class="sim-body">
+          <div class="search-box fade-in">
+            <span style="font-size:14px;color:var(--gray-400);">🔍</span>
+            <input style="border:none;background:transparent;flex:1;font-size:14px;outline:none;" value="张三">
+          </div>
+          <p style="font-size:12px;color:var(--gray-400);margin-bottom:8px;">找到 1 条结果</p>
+          <div class="sim-card fade-in" style="padding:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div class="student-avatar" style="width:40px;height:40px;font-size:14px;">张</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">张三</div>
+                <div style="font-size:12px;color:var(--gray-400);">学号：2024001</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:13px;color:var(--thu-purple);font-weight:600;">篮球社</div>
+                <div style="font-size:11px;color:var(--gray-400);">张老师</div>
+              </div>
+            </div>
+          </div>
+          <div class="sim-card fade-in" style="padding:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div class="student-avatar" style="width:40px;height:40px;font-size:14px;">张</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">张伟</div>
+                <div style="font-size:12px;color:var(--gray-400);">学号：2024035</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:13px;color:var(--thu-purple);font-weight:600;">美术社</div>
+                <div style="font-size:11px;color:var(--gray-400);">赵老师</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`
+  },
+  // 9. 系统设置
+  {
+    title: '系统设置',
+    text: '管理员可以在「系统设置」页面修改管理员密码。输入新密码（至少4位）并确认，点击修改后自动退出登录，需用新密码重新登录。修改密码后不影响教师端的PIN码，教师PIN码需要在社团管理中单独编辑。',
+    render: () => `
+      <div class="sim-page">
+        <div class="sim-header"><h1>管理后台</h1><div style="font-size:20px;">🔍</div></div>
+        <div class="sim-tab-bar">
+          <div class="sim-tab">仪表盘</div>
+          <div class="sim-tab">社团管理</div>
+          <div class="sim-tab">批量导入</div>
+          <div class="sim-tab">导出报表</div>
+          <div class="sim-tab active">系统设置</div>
+        </div>
+        <div class="sim-body">
+          <div class="sim-card fade-in">
+            <h3 style="font-size:14px;margin-bottom:8px;">修改管理员密码</h3>
+            <p style="font-size:12px;color:var(--gray-400);margin-bottom:12px;">修改后需用新密码重新登录</p>
+            <input class="sim-input fade-in" type="password" placeholder="输入新密码（至少4位）" style="margin-bottom:8px;" value="••••••">
+            <input class="sim-input fade-in" type="password" placeholder="再次输入新密码" style="margin-bottom:12px;" value="••••••">
+            <button class="sim-btn sim-btn-primary pulse">确认修改</button>
+          </div>
+        </div>
+      </div>`
+  }
+];
+
+// ============ 播放逻辑 ============
+let currentStep = 0;
+let isPlaying = true;
+let timer = null;
+let typeTimer = null;
+
+const screen = document.getElementById('screen');
+const stepBadge = document.getElementById('stepBadge');
+const stepTitle = document.getElementById('stepTitle');
+const stepText = document.getElementById('stepText');
+const progressFill = document.getElementById('progressFill');
+const progressDots = document.getElementById('progressDots');
+const playBtn = document.getElementById('playBtn');
+
+// 初始化进度点
+function initDots() {
+  progressDots.innerHTML = '';
+  for (let i = 0; i < steps.length; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.onclick = () => goToStep(i);
+    progressDots.appendChild(d);
+  }
+}
+
+function updateDots() {
+  const dots = progressDots.children;
+  for (let i = 0; i < dots.length; i++) {
+    dots[i].className = 'dot' + (i < currentStep ? ' done' : (i === currentStep ? ' current' : ''));
+  }
+}
+
+// 打字机效果
+function typeText(element, text, callback) {
+  clearTimeout(typeTimer);
+  element.innerHTML = '';
+  element.classList.add('cursor');
+  let i = 0;
+  function type() {
+    if (i < text.length) {
+      element.innerHTML = text.substring(0, i + 1);
+      i++;
+      typeTimer = setTimeout(type, 25);
+    } else {
+      element.classList.remove('cursor');
+      if (callback) callback();
+    }
+  }
+  type();
+}
+
+function renderStep(index) {
+  const step = steps[index];
+  screen.innerHTML = step.render();
+  stepBadge.textContent = `步骤 ${index + 1} / ${steps.length}`;
+  stepTitle.textContent = step.title;
+  typeText(stepText, step.text);
+  progressFill.style.width = `${((index + 1) / steps.length) * 100}%`;
+  updateDots();
+}
+
+function nextStep() {
+  if (currentStep < steps.length - 1) {
+    currentStep++;
+    renderStep(currentStep);
+    resetTimer();
+  } else {
+    // 播放结束
+    isPlaying = false;
+    playBtn.textContent = '重新播放';
+    clearTimeout(timer);
+  }
+}
+
+function prevStep() {
+  if (currentStep > 0) {
+    currentStep--;
+    renderStep(currentStep);
+    resetTimer();
+  }
+}
+
+function goToStep(index) {
+  currentStep = index;
+  renderStep(currentStep);
+  resetTimer();
+}
+
+function resetTimer() {
+  clearTimeout(timer);
+  if (isPlaying) {
+    timer = setTimeout(nextStep, DURATION);
+  }
+}
+
+function togglePlay() {
+  if (currentStep === steps.length - 1 && !isPlaying) {
+    // 重新播放
+    currentStep = 0;
+    isPlaying = true;
+    renderStep(currentStep);
+    resetTimer();
+    playBtn.textContent = '暂停';
+    return;
+  }
+  isPlaying = !isPlaying;
+  if (isPlaying) {
+    resetTimer();
+    playBtn.textContent = '暂停';
+  } else {
+    clearTimeout(timer);
+    playBtn.textContent = '播放';
+  }
+}
+
+// 键盘控制
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') prevStep();
+  if (e.key === 'ArrowRight') nextStep();
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+});
+
+// 启动
+initDots();
+renderStep(0);
+resetTimer();
+</script>
+</body>
+</html>
