@@ -102,6 +102,31 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Mi
   .demo-wrap{flex-direction:column;align-items:center}
   .narration{width:375px}
 }
+
+/* 手机端适配 */
+@media(max-width:480px){
+  body{padding:8px}
+  .demo-wrap{gap:12px}
+  .phone{width:280px;height:540px;border-width:6px;border-radius:28px}
+  .phone-notch{width:110px;height:18px}
+  .narration{width:100%}
+  .narration-card{padding:16px}
+  .narration-title{font-size:16px;margin-bottom:8px}
+  .narration-text{font-size:13px;line-height:1.7;min-height:80px}
+  .narration-step{font-size:11px;padding:2px 8px;margin-bottom:8px}
+  .sim-header{padding:28px 12px 10px}
+  .sim-header h1{font-size:15px}
+  .sim-body{padding:10px}
+  .sim-card{padding:10px}
+  .stat-num{font-size:20px}
+  .stat-label{font-size:10px}
+  .student-name{font-size:13px}
+  .student-id{font-size:10px}
+  .student-avatar{width:28px;height:28px;font-size:10px}
+  .att-btn{padding:3px 8px;font-size:11px}
+  .ctrl-btn{height:40px;font-size:13px}
+  .progress-dots{flex-wrap:wrap;justify-content:center}
+}
 </style>
 </head>
 <body>

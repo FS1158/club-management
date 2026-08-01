@@ -54,6 +54,10 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function jsStr(text) {
+  return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
@@ -67,10 +71,10 @@ function closeModal(id, event) {
 
 // ============ 登录系统 ============
 
-function switchLoginTab(tab) {
+function switchLoginTab(tab, btn) {
   document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.login-form').forEach(f => f.classList.remove('active'));
-  event.target.classList.add('active');
+  btn.classList.add('active');
   document.getElementById('login' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
 }
 
@@ -334,10 +338,10 @@ async function loadAdminClubs() {
         <div class="admin-club-stats">
           <span>${escapeHtml(c.teacher || '未设置')}</span>
           <span>${c.studentCount}人</span>
-          <span>PIN: ${c.pin || '未设'}</span>
+          <span>PIN: ${c.hasPin ? '已设' : '未设'}</span>
         </div>
       </div>
-      <button class="icon-btn-sm delete" onclick="event.stopPropagation(); deleteClubFromList('${c.id}','${escapeHtml(c.name)}')" title="删除社团" style="flex-shrink:0;margin-left:8px;">
+      <button class="icon-btn-sm delete" onclick="event.stopPropagation(); deleteClubFromList('${c.id}','${jsStr(c.name)}')" title="删除社团" style="flex-shrink:0;margin-left:8px;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>
@@ -599,10 +603,10 @@ function renderStudentManageList() {
         <div class="student-id">${escapeHtml(s.id)}</div>
       </div>
       <div class="student-manage-actions">
-        ${userRole === 'admin' ? `<button class="icon-btn-sm transfer" onclick="showTransfer('${s.id}','${escapeHtml(s.name)}')" title="调换社团">
+        ${userRole === 'admin' ? `<button class="icon-btn-sm transfer" onclick="showTransfer('${s.id}','${jsStr(s.name)}')" title="调换社团">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         </button>` : ''}
-        <button class="icon-btn-sm delete" onclick="deleteStudent('${s.id}','${escapeHtml(s.name)}')" title="删除">
+        <button class="icon-btn-sm delete" onclick="deleteStudent('${s.id}','${jsStr(s.name)}')" title="删除">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
         </button>
       </div>

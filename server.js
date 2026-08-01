@@ -140,7 +140,8 @@ app.get('/api/clubs', (req, res) => {
     name: c.name,
     teacher: c.teacher,
     studentCount: (c.students || []).length,
-    attendanceDates: Object.keys(c.attendance || {}).sort().reverse()
+    attendanceDates: Object.keys(c.attendance || {}).sort().reverse(),
+    hasPin: !!(c.pin && c.pin.length > 0)
   }));
   res.json(list);
 });
