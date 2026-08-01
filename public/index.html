@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="社团考勤">
+  <meta name="apple-mobile-web-app-title" content="社团管理">
   <meta name="theme-color" content="#660874">
-  <title>清华附中初中社团考勤管理系统</title>
+  <title>清华附中初中社团管理系统</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -21,7 +21,7 @@
             <img src="images/logo.jpg" alt="清华附中校徽" class="school-logo">
           </div>
           <h1 class="login-title">清华附中初中</h1>
-          <h2 class="login-subtitle">社团考勤管理系统</h2>
+          <h2 class="login-subtitle">社团管理系统</h2>
         </div>
 
         <div class="login-tabs">
@@ -71,6 +71,7 @@
         <button class="admin-nav-btn" onclick="switchAdminTab('clubs', this)">社团管理</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('import', this)">批量导入</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('export', this)">导出报表</button>
+        <button class="admin-nav-btn" onclick="switchAdminTab('resources', this)">资源下载</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('settings', this)">系统设置</button>
       </div>
 
@@ -84,8 +85,14 @@
         <div id="dashboardStats" class="stats-grid"></div>
         <div id="dashboardDateStats"></div>
         <div class="card">
-          <h3>各社团概览</h3>
-          <div id="adminClubList" class="admin-club-list"></div>
+          <div class="attendance-header">
+            <h3 style="margin-bottom:0;">各社团概览</h3>
+            <span id="adminClubCount" class="club-count-badge"></span>
+          </div>
+          <div class="search-bar" style="padding:8px 0 8px 0;">
+            <input type="text" id="adminClubSearchInput" placeholder="搜索社团名称或老师..." oninput="filterAdminClubs()">
+          </div>
+          <div id="adminClubList" class="admin-club-list admin-club-scroll"></div>
         </div>
       </div>
 
@@ -129,6 +136,43 @@
             </div>
             <div id="exportClubList"></div>
           </div>
+        </div>
+      </div>
+
+      <div id="adminTab-resources" class="admin-tab">
+        <div class="card">
+          <h3>资源下载</h3>
+          <p class="hint" style="margin-bottom:12px;">下载各社团上传的教案和照片，ZIP 自动按社团分类</p>
+          <div class="export-section">
+            <div class="export-card" onclick="downloadAllResources('all')">
+              <div class="export-icon">📦</div>
+              <div class="export-info">
+                <div class="export-title">一键下载全部资源</div>
+                <div class="export-desc">所有社团的教案+照片，按社团名分文件夹</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="export-card" onclick="downloadAllResources('lessons')">
+              <div class="export-icon">📋</div>
+              <div class="export-info">
+                <div class="export-title">下载全部教案</div>
+                <div class="export-desc">仅教案文件，按社团名分文件夹</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="export-card" onclick="downloadAllResources('photos')">
+              <div class="export-icon">📸</div>
+              <div class="export-info">
+                <div class="export-title">下载全部照片</div>
+                <div class="export-desc">仅照片文件，按社团名分文件夹</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>按社团下载</h3>
+          <div id="resourceClubList"></div>
         </div>
       </div>
 
@@ -215,16 +259,52 @@
           <div id="studentManageList"></div>
         </div>
 
-        <!-- 考勤管理 -->
-        <div class="card">
+        <!-- 考勤管理（醒目位置） -->
+        <div class="card attendance-highlight-card">
           <div class="attendance-header">
-            <h3>考勤记录</h3>
+            <h3 class="attendance-highlight-title">📝 考勤记录</h3>
             <div>
               <button class="btn-small" onclick="exportSingleClub(currentClubId)" id="exportSingleBtn">导出</button>
               <button class="btn-small" onclick="showAddDate()" style="margin-left:6px;">+ 日期</button>
             </div>
           </div>
+          <button class="btn-quick-attendance" onclick="quickAttendance()">⚡ 今日考勤打卡</button>
           <div id="dateList" class="date-list"></div>
+        </div>
+
+        <!-- 教师资源管理（教案和照片） -->
+        <div id="resourceSection" class="card">
+          <details class="resource-details">
+            <summary class="resource-summary">
+              <span class="resource-summary-icon">📁</span>
+              <span>教案与照片上传</span>
+              <span class="resource-summary-arrow">›</span>
+            </summary>
+            <div class="resource-details-content">
+
+              <div class="resource-upload-group">
+                <h4 style="font-size:14px;margin-bottom:8px;">📋 教案上传</h4>
+                <div class="file-upload-area" onclick="document.getElementById('lessonFileInput').click()">
+                  <div class="upload-icon">📋</div>
+                  <p class="upload-text">点击上传教案</p>
+                  <p class="upload-formats">支持 PDF / Word / PPT / 图片等</p>
+                  <input type="file" id="lessonFileInput" style="display:none" onchange="uploadResource(event,'lesson')">
+                </div>
+                <div id="lessonFileList" class="resource-file-list"></div>
+              </div>
+
+              <div class="resource-upload-group" style="margin-top:16px;">
+                <h4 style="font-size:14px;margin-bottom:8px;">📸 上课精彩照片</h4>
+                <div class="file-upload-area" onclick="document.getElementById('photoFileInput').click()">
+                  <div class="upload-icon">📸</div>
+                  <p class="upload-text">点击上传照片</p>
+                  <p class="upload-formats">支持 JPG / PNG / GIF / 视频等</p>
+                  <input type="file" id="photoFileInput" style="display:none" onchange="uploadResource(event,'photo')">
+                </div>
+                <div id="photoFileList" class="resource-file-list"></div>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -335,6 +415,23 @@
         <button class="btn-secondary" onclick="closeModal('modal-transfer')">取消</button>
         <button class="btn-primary" onclick="transferStudent()">确认调换</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 出勤明细弹窗 -->
+  <div id="modal-attendanceDetail" class="modal-overlay hidden" onclick="closeModal('modal-attendanceDetail', event)">
+    <div class="modal modal-large">
+      <div class="attendance-detail-header">
+        <h3 id="attendanceDetailClubName">社团出勤明细</h3>
+        <span id="attendanceDetailTeacher" class="attendance-detail-teacher"></span>
+      </div>
+      <div id="attendanceDetailSummary" class="attendance-detail-summary"></div>
+      <div id="attendanceDetailDate" class="attendance-detail-date"></div>
+      <div class="search-bar" style="padding:8px 0 8px 0;">
+        <input type="text" id="attendanceDetailSearch" placeholder="搜索学号或姓名..." oninput="filterAttendanceDetail()">
+      </div>
+      <div id="attendanceDetailList" class="attendance-detail-list"></div>
+      <button class="btn-secondary" onclick="closeModal('modal-attendanceDetail')" style="margin-top:12px;">关闭</button>
     </div>
   </div>
 

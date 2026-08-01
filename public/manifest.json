@@ -1,11 +1,11 @@
 {
-  "name": "社团考勤管理",
-  "short_name": "社团考勤",
-  "description": "社团考勤管理系统 - 多社团管理、学生名单导入、实时考勤打卡",
+  "name": "清华附中初中社团管理系统",
+  "short_name": "社团管理",
+  "description": "社团管理系统 - 多社团管理、学生名单导入、实时考勤打卡、教案照片上传",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f0f2f5",
-  "theme_color": "#4f6df5",
+  "background_color": "#f5f0f7",
+  "theme_color": "#660874",
   "orientation": "portrait",
   "icons": []
 }

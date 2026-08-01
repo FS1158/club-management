@@ -3,6 +3,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const multer = require('multer');
+const archiver = require('archiver');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,12 +15,45 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ============ 数据存储 ============
 const DATA_FILE = path.join(__dirname, 'data.json');
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+
+// 确保上传目录存在
+function ensureUploadDir(clubId, type) {
+  const dir = path.join(UPLOAD_DIR, clubId, type === 'lesson' ? 'lessons' : 'photos');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+// 启动时创建上传根目录
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+// Multer 文件上传配置
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const clubId = req.params.clubId;
+      const type = req.query.type || 'photo';
+      const dir = ensureUploadDir(clubId, type);
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const name = Date.now() + '_' + Math.random().toString(36).substring(2, 8) + ext;
+      cb(null, name);
+    }
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 function loadData() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
   } catch (e) {
-    return { settings: { appName: '清华附中初中社团考勤管理系统', adminPassword: 'admin123' }, clubs: [] };
+    return { settings: { appName: '清华附中初中社团管理系统', adminPassword: 'admin123' }, clubs: [] };
   }
 }
 
@@ -31,7 +66,7 @@ function initData() {
   if (!fs.existsSync(DATA_FILE)) {
     const sample = {
       settings: {
-        appName: '清华附中初中社团考勤管理系统',
+        appName: '清华附中初中社团管理系统',
         adminPassword: 'admin123'
       },
       clubs: [
@@ -65,7 +100,7 @@ function initData() {
     // 升级旧数据格式
     const data = loadData();
     if (!data.settings) {
-      data.settings = { appName: '清华附中初中社团考勤管理系统', adminPassword: 'admin123' };
+      data.settings = { appName: '清华附中初中社团管理系统', adminPassword: 'admin123' };
       saveData(data);
     }
   }
@@ -81,7 +116,8 @@ function generateToken() {
 
 function authMiddleware(requiredRole) {
   return (req, res, next) => {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    let token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token && req.query.token) token = req.query.token;
     if (!token || !sessions.has(token)) {
       return res.status(401).json({ error: '未登录或登录已过期' });
     }
@@ -141,7 +177,10 @@ app.get('/api/clubs', (req, res) => {
     teacher: c.teacher,
     studentCount: (c.students || []).length,
     attendanceDates: Object.keys(c.attendance || {}).sort().reverse(),
-    hasPin: !!(c.pin && c.pin.length > 0)
+    hasPin: !!(c.pin && c.pin.length > 0),
+    lessonCount: (c.files || []).filter(f => f.type === 'lesson').length,
+    photoCount: (c.files || []).filter(f => f.type === 'photo').length,
+    fileCount: (c.files || []).length
   }));
   res.json(list);
 });
@@ -536,6 +575,54 @@ app.get('/api/admin/dashboard', authMiddleware('admin'), (req, res) => {
   res.json(result);
 });
 
+// 管理员：按日期和状态获取所有学生明细
+app.get('/api/admin/attendance-detail', authMiddleware('admin'), (req, res) => {
+  const data = loadData();
+  const date = req.query.date;
+  const status = req.query.status; // present | late | absent | unchecked | all
+
+  if (!date) return res.status(400).json({ error: '缺少日期参数' });
+
+  const statusTextMap = {
+    present: '到勤',
+    late: '迟到',
+    absent: '缺席',
+    unchecked: '未标记',
+    all: '全部'
+  };
+
+  const students = [];
+  data.clubs.forEach(c => {
+    const records = (c.attendance || {})[date] || {};
+    (c.students || []).forEach(s => {
+      const sStatus = records[s.id] || null;
+      let match = false;
+      if (status === 'all') match = true;
+      else if (status === 'unchecked') match = (sStatus === null);
+      else match = (sStatus === status);
+
+      if (match) {
+        students.push({
+          id: s.id,
+          name: s.name,
+          clubId: c.id,
+          clubName: c.name,
+          teacher: c.teacher || '',
+          status: sStatus
+        });
+      }
+    });
+  });
+
+  res.json({
+    status: status,
+    statusText: statusTextMap[status] || '全部',
+    date: date,
+    total: students.length,
+    students: students
+  });
+});
+
 // 管理员：批量导入社团和学生
 app.post('/api/admin/bulk-import', authMiddleware('admin'), (req, res) => {
   const data = loadData();
@@ -616,6 +703,9 @@ function statusText(status) {
 
 // 导出单个社团考勤CSV
 app.get('/api/clubs/:id/export', authMiddleware('teacher'), (req, res) => {
+  if (!canEditClub(req.session, req.params.id)) {
+    return res.status(403).json({ error: '无权导出此社团数据' });
+  }
   const data = loadData();
   const club = data.clubs.find(c => c.id === req.params.id);
   if (!club) return res.status(404).json({ error: '社团不存在' });
@@ -679,7 +769,7 @@ app.get('/api/admin/export-all', authMiddleware('admin'), (req, res) => {
   const allDates = Array.from(allDatesSet).sort();
 
   let csv = '\ufeff';
-  csv += `清华附中初中社团考勤管理系统 - 全部社团考勤汇总\n`;
+  csv += `清华附中初中社团管理系统 - 全部社团考勤汇总\n`;
   csv += `导出时间,${new Date().toLocaleString('zh-CN')}\n`;
   csv += `社团总数,${clubs.length}\n`;
   csv += `学生总数,${clubs.reduce((sum, c) => sum + (c.students || []).length, 0)}\n\n`;
@@ -729,12 +819,190 @@ app.get('/api/admin/export-all', authMiddleware('admin'), (req, res) => {
   res.send(csv);
 });
 
+// ============ 资源管理（教案/照片上传下载） ============
+
+// 上传文件（教师或管理员）
+app.post('/api/clubs/:clubId/upload', authMiddleware('teacher'), upload.single('file'), (req, res) => {
+  if (!canEditClub(req.session, req.params.clubId)) {
+    return res.status(403).json({ error: '无权上传' });
+  }
+  const type = req.query.type || 'photo';
+  if (!['lesson', 'photo'].includes(type)) {
+    return res.status(400).json({ error: '类型必须是 lesson 或 photo' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: '未接收到文件' });
+  }
+
+  const data = loadData();
+  const club = data.clubs.find(c => c.id === req.params.clubId);
+  if (!club) return res.status(404).json({ error: '社团不存在' });
+
+  if (!club.files) club.files = [];
+  const fileRecord = {
+    id: 'file_' + crypto.randomBytes(6).toString('hex'),
+    type: type,
+    filename: req.file.filename,
+    originalName: Buffer.from(req.file.originalname, 'latin1').toString('utf8'),
+    uploadDate: new Date().toISOString(),
+    size: req.file.size
+  };
+  club.files.push(fileRecord);
+  saveData(data);
+  broadcast({ type: 'files_updated', clubId: club.id });
+  res.json({ success: true, file: fileRecord });
+});
+
+// 获取社团文件列表（教师或管理员）
+app.get('/api/clubs/:clubId/files', authMiddleware('teacher'), (req, res) => {
+  if (!canEditClub(req.session, req.params.clubId)) {
+    return res.status(403).json({ error: '无权查看' });
+  }
+  const data = loadData();
+  const club = data.clubs.find(c => c.id === req.params.clubId);
+  if (!club) return res.status(404).json({ error: '社团不存在' });
+  res.json(club.files || []);
+});
+
+// 下载单个文件（教师或管理员）
+app.get('/api/clubs/:clubId/files/:fileId/download', authMiddleware('teacher'), (req, res) => {
+  if (!canEditClub(req.session, req.params.clubId)) {
+    return res.status(403).json({ error: '无权下载' });
+  }
+  const data = loadData();
+  const club = data.clubs.find(c => c.id === req.params.clubId);
+  if (!club || !club.files) return res.status(404).json({ error: '文件不存在' });
+  const file = club.files.find(f => f.id === req.params.fileId);
+  if (!file) return res.status(404).json({ error: '文件不存在' });
+
+  const filePath = path.join(UPLOAD_DIR, req.params.clubId, file.type === 'lesson' ? 'lessons' : 'photos', file.filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件不存在，可能已被清理' });
+
+  const filename = encodeURIComponent(file.originalName);
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  fs.createReadStream(filePath).pipe(res);
+});
+
+// 删除文件（教师或管理员）
+app.delete('/api/clubs/:clubId/files/:fileId', authMiddleware('teacher'), (req, res) => {
+  if (!canEditClub(req.session, req.params.clubId)) {
+    return res.status(403).json({ error: '无权删除' });
+  }
+  const data = loadData();
+  const club = data.clubs.find(c => c.id === req.params.clubId);
+  if (!club || !club.files) return res.status(404).json({ error: '文件不存在' });
+
+  const fileIdx = club.files.findIndex(f => f.id === req.params.fileId);
+  if (fileIdx === -1) return res.status(404).json({ error: '文件不存在' });
+
+  const file = club.files[fileIdx];
+  // 删除物理文件
+  const filePath = path.join(UPLOAD_DIR, req.params.clubId, file.type === 'lesson' ? 'lessons' : 'photos', file.filename);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+  // 从数据中移除
+  club.files.splice(fileIdx, 1);
+  saveData(data);
+  broadcast({ type: 'files_updated', clubId: club.id });
+  res.json({ success: true });
+});
+
+// 管理员：批量下载资源（zip按社团分类）
+app.get('/api/admin/download/:type', authMiddleware('admin'), (req, res) => {
+  const downloadType = req.params.type; // all, lessons, photos
+  if (!['all', 'lessons', 'photos'].includes(downloadType)) {
+    return res.status(400).json({ error: '无效的下载类型' });
+  }
+
+  const data = loadData();
+  const dateStr = new Date().toISOString().split('T')[0];
+  let zipName;
+  if (downloadType === 'all') zipName = `全部社团资源_${dateStr}.zip`;
+  else if (downloadType === 'lessons') zipName = `全部教案_${dateStr}.zip`;
+  else zipName = `全部照片_${dateStr}.zip`;
+
+  const archive = archiver('zip', { zlib: { level: 5 } });
+  archive.on('error', (err) => {
+    console.error('Archive error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: '打包失败' });
+    }
+    archive.abort();
+  });
+  const filename = encodeURIComponent(zipName);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
+  archive.pipe(res);
+
+  let fileCount = 0;
+  data.clubs.forEach(club => {
+    if (!club.files || club.files.length === 0) return;
+    const clubFolder = `${club.name}_${club.teacher || '未设置老师'}`;
+
+    club.files.forEach(file => {
+      if (downloadType === 'lessons' && file.type !== 'lesson') return;
+      if (downloadType === 'photos' && file.type !== 'photo') return;
+
+      const filePath = path.join(UPLOAD_DIR, club.id, file.type === 'lesson' ? 'lessons' : 'photos', file.filename);
+      if (fs.existsSync(filePath)) {
+        let zipPath;
+        if (downloadType === 'all') {
+          const subfolder = file.type === 'lesson' ? '教案' : '照片';
+          zipPath = `${clubFolder}/${subfolder}/${file.originalName}`;
+        } else {
+          zipPath = `${clubFolder}/${file.originalName}`;
+        }
+        archive.file(filePath, { name: zipPath });
+        fileCount++;
+      }
+    });
+  });
+
+  archive.finalize();
+});
+
+// 管理员：下载单个社团全部资源
+app.get('/api/admin/download/club/:clubId', authMiddleware('admin'), (req, res) => {
+  const data = loadData();
+  const club = data.clubs.find(c => c.id === req.params.clubId);
+  if (!club) return res.status(404).json({ error: '社团不存在' });
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  const zipName = `${club.name}_资源_${dateStr}.zip`;
+  const archive = archiver('zip', { zlib: { level: 5 } });
+  archive.on('error', (err) => {
+    console.error('Archive error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: '打包失败' });
+    }
+    archive.abort();
+  });
+  const filename = encodeURIComponent(zipName);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
+  archive.pipe(res);
+
+  if (club.files) {
+    club.files.forEach(file => {
+      const filePath = path.join(UPLOAD_DIR, club.id, file.type === 'lesson' ? 'lessons' : 'photos', file.filename);
+      if (fs.existsSync(filePath)) {
+        const subfolder = file.type === 'lesson' ? '教案' : '照片';
+        archive.file(filePath, { name: `${subfolder}/${file.originalName}` });
+      }
+    });
+  }
+
+  archive.finalize();
+});
+
 // SPA 回退
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`清华附中社团考勤管理系统已启动: http://localhost:${PORT}`);
+  console.log(`清华附中社团管理系统已启动: http://localhost:${PORT}`);
   console.log(`管理员默认密码: admin123`);
 });

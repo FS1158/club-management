@@ -1,5 +1,5 @@
 // ============================
-// 清华附中社团考勤管理系统 - 前端逻辑
+// 清华附中初中社团管理系统 - 前端逻辑
 // ============================
 
 const API = '';
@@ -185,6 +185,7 @@ function switchAdminTab(tab, btn) {
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('adminTab-' + tab).classList.add('active');
+  if (tab === 'resources') loadResourceClubs();
 }
 
 async function loadDashboard() {
@@ -223,19 +224,8 @@ async function loadDashboard() {
     const listEl = document.getElementById('adminClubList');
     if (allClubs.length === 0) await loadAllClubsData();
 
-    listEl.innerHTML = allClubs.map(c => `
-      <div class="admin-club-item" onclick="openClub('${c.id}')">
-        <div class="club-icon">${escapeHtml(c.name.charAt(0))}</div>
-        <div class="club-info">
-          <div class="club-name">${escapeHtml(c.name)}</div>
-          <div class="admin-club-stats">
-            <span>${escapeHtml(c.teacher || '未设置')}</span>
-            <span>${c.studentCount}人</span>
-            <span>${c.attendanceDates.length}次考勤</span>
-          </div>
-        </div>
-      </div>
-    `).join('');
+    renderAdminClubOverview(allClubs);
+    document.getElementById('adminClubCount').textContent = allClubs.length + ' 个社团';
 
     // 加载选中日期的统计
     await loadDashboardByDate();
@@ -246,6 +236,193 @@ async function loadDashboard() {
 
 async function onDashboardDateChange() {
   await loadDashboardByDate();
+}
+
+// 仪表盘社团概览渲染
+function renderAdminClubOverview(clubs) {
+  const listEl = document.getElementById('adminClubList');
+  if (!clubs || clubs.length === 0) {
+    listEl.innerHTML = `<div class="empty-state" style="padding:30px 10px;"><p style="font-size:14px;">未找到匹配社团</p></div>`;
+    return;
+  }
+  listEl.innerHTML = clubs.map(c => `
+    <div class="admin-club-item" onclick="openClub('${c.id}')">
+      <div class="club-icon">${escapeHtml(c.name.charAt(0))}</div>
+      <div class="club-info">
+        <div class="club-name">${escapeHtml(c.name)}</div>
+        <div class="admin-club-stats">
+          <span>${escapeHtml(c.teacher || '未设置')}</span>
+          <span>${c.studentCount}人</span>
+          <span>${c.attendanceDates.length}次考勤</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterAdminClubs() {
+  const keyword = document.getElementById('adminClubSearchInput').value.trim().toLowerCase();
+  const filtered = keyword
+    ? allClubs.filter(c => c.name.toLowerCase().includes(keyword) || (c.teacher && c.teacher.toLowerCase().includes(keyword)))
+    : allClubs;
+  renderAdminClubOverview(filtered);
+}
+
+// ============ 出勤明细弹窗 ============
+
+let attendanceDetailData = null;
+
+async function showClubAttendanceDetail(clubId, clubName, teacher) {
+  const date = document.getElementById('dashboardDateInput').value;
+
+  document.getElementById('attendanceDetailClubName').textContent = clubName + ' - 出勤明细';
+  document.getElementById('attendanceDetailTeacher').textContent = '指导老师：' + (teacher || '未设置');
+  document.getElementById('attendanceDetailDate').textContent = date ? `${formatDate(date)} ${getWeekday(date)}` : '';
+  document.getElementById('attendanceDetailSummary').innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-400);">加载中...</div>';
+  document.getElementById('attendanceDetailList').innerHTML = '';
+  document.getElementById('attendanceDetailSearch').value = '';
+
+  document.getElementById('modal-attendanceDetail').classList.remove('hidden');
+
+  try {
+    const res = await fetch(API + '/api/clubs/' + clubId);
+    const club = await res.json();
+
+    const students = club.students || [];
+    const records = (club.attendance || {})[date] || {};
+
+    let present = 0, late = 0, absent = 0;
+    const studentList = students.map(s => {
+      const status = records[s.id] || null;
+      if (status === 'present') present++;
+      if (status === 'late') late++;
+      if (status === 'absent') absent++;
+      return { id: s.id, name: s.name, clubName: clubName, status };
+    });
+
+    attendanceDetailData = { students: studentList, clubName, total: students.length, present, late, absent };
+
+    // 汇总统计
+    const unchecked = students.length - present - late - absent;
+    document.getElementById('attendanceDetailSummary').innerHTML = `
+      <div class="attendance-detail-stat">
+        <div class="attendance-detail-stat-val" style="color:var(--gray-700);">${students.length}</div>
+        <div class="attendance-detail-stat-label">应到</div>
+      </div>
+      <div class="attendance-detail-stat">
+        <div class="attendance-detail-stat-val" style="color:var(--success);">${present}</div>
+        <div class="attendance-detail-stat-label">到勤</div>
+      </div>
+      <div class="attendance-detail-stat">
+        <div class="attendance-detail-stat-val" style="color:var(--warning);">${late}</div>
+        <div class="attendance-detail-stat-label">迟到</div>
+      </div>
+      <div class="attendance-detail-stat">
+        <div class="attendance-detail-stat-val" style="color:var(--danger);">${absent}</div>
+        <div class="attendance-detail-stat-label">缺席</div>
+      </div>
+      <div class="attendance-detail-stat">
+        <div class="attendance-detail-stat-val" style="color:var(--gray-400);">${unchecked}</div>
+        <div class="attendance-detail-stat-label">未标记</div>
+      </div>
+    `;
+
+    renderAttendanceDetailList(studentList);
+  } catch (e) {
+    document.getElementById('attendanceDetailSummary').innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);">加载失败</div>';
+  }
+}
+
+function renderAttendanceDetailList(students) {
+  const container = document.getElementById('attendanceDetailList');
+  if (!students || students.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:20px;"><p style="font-size:14px;">暂无学生名单</p></div>';
+    return;
+  }
+
+  const statusMap = {
+    present: { text: '到勤', cls: 'detail-present' },
+    late: { text: '迟到', cls: 'detail-late' },
+    absent: { text: '缺席', cls: 'detail-absent' },
+    null: { text: '未标记', cls: 'detail-unchecked' }
+  };
+
+  container.innerHTML = students.map(s => {
+    const st = statusMap[s.status] || statusMap[null];
+    const clubInfo = s.teacher ? `${escapeHtml(s.clubName)} · ${escapeHtml(s.teacher)}` : escapeHtml(s.clubName);
+    return `
+      <div class="attendance-detail-row">
+        <div class="attendance-detail-student">
+          <span class="attendance-detail-name">${escapeHtml(s.name)}</span>
+          <span class="attendance-detail-id">${escapeHtml(s.id)}</span>
+        </div>
+        <span class="attendance-detail-club">${clubInfo}</span>
+        <span class="attendance-detail-status ${st.cls}">${st.text}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterAttendanceDetail() {
+  if (!attendanceDetailData) return;
+  const keyword = document.getElementById('attendanceDetailSearch').value.trim().toLowerCase();
+  const filtered = keyword
+    ? attendanceDetailData.students.filter(s =>
+        s.name.toLowerCase().includes(keyword) || s.id.toLowerCase().includes(keyword) ||
+        (s.clubName && s.clubName.toLowerCase().includes(keyword))
+      )
+    : attendanceDetailData.students;
+  renderAttendanceDetailList(filtered);
+}
+
+// ============ 出勤汇总弹窗（跨社团） ============
+
+async function showOverallAttendanceDetail(status) {
+  const date = document.getElementById('dashboardDateInput').value;
+  if (!date) { showToast('请先选择日期'); return; }
+
+  const statusMap = {
+    all: { text: '全部学生', color: 'var(--gray-700)' },
+    present: { text: '到勤学生', color: 'var(--success)' },
+    late: { text: '迟到学生', color: 'var(--warning)' },
+    absent: { text: '缺席学生', color: 'var(--danger)' },
+    unchecked: { text: '未标记学生', color: 'var(--gray-400)' }
+  };
+  const stInfo = statusMap[status] || statusMap.all;
+
+  document.getElementById('attendanceDetailClubName').textContent = stInfo.text + '汇总';
+  document.getElementById('attendanceDetailTeacher').textContent = formatDate(date) + ' ' + getWeekday(date);
+  document.getElementById('attendanceDetailDate').textContent = '';
+  document.getElementById('attendanceDetailSummary').innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-400);">加载中...</div>';
+  document.getElementById('attendanceDetailList').innerHTML = '';
+  document.getElementById('attendanceDetailSearch').value = '';
+
+  document.getElementById('modal-attendanceDetail').classList.remove('hidden');
+
+  try {
+    const res = await apiFetch('/api/admin/attendance-detail?date=' + encodeURIComponent(date) + '&status=' + status);
+    const data = await res.json();
+
+    attendanceDetailData = {
+      students: data.students,
+      clubName: '',
+      total: data.total,
+      present: 0, late: 0, absent: 0,
+      isOverall: true
+    };
+
+    // 汇总统计 - 简化为总数
+    document.getElementById('attendanceDetailSummary').innerHTML = `
+      <div class="attendance-detail-stat" style="flex:1;">
+        <div class="attendance-detail-stat-val" style="color:${stInfo.color};font-size:28px;">${data.total}</div>
+        <div class="attendance-detail-stat-label">${stInfo.text}</div>
+      </div>
+    `;
+
+    renderAttendanceDetailList(data.students);
+  } catch (e) {
+    document.getElementById('attendanceDetailSummary').innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);">加载失败</div>';
+  }
 }
 
 async function loadDashboardByDate() {
@@ -265,24 +442,25 @@ async function loadDashboardByDate() {
     let html = `
       <div class="card">
         <h3>${formatDate(date)} ${getWeekday(date)} 出勤情况</h3>
+        <p class="hint" style="margin-bottom:10px;">点击下方数字查看对应学生名单</p>
         <div class="stats-grid" style="padding:0;">
-          <div class="stat-card">
+          <div class="stat-card clickable-stat" onclick="showOverallAttendanceDetail('all')">
             <div class="stat-value" style="color:var(--gray-700);">${ds.totalStudents}</div>
             <div class="stat-label">应到人数</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable-stat" onclick="showOverallAttendanceDetail('present')">
             <div class="stat-value" style="color:var(--success);">${ds.present}</div>
             <div class="stat-label">到勤</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable-stat" onclick="showOverallAttendanceDetail('late')">
             <div class="stat-value" style="color:var(--warning);">${ds.late}</div>
             <div class="stat-label">迟到</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable-stat" onclick="showOverallAttendanceDetail('absent')">
             <div class="stat-value" style="color:var(--danger);">${ds.absent}</div>
             <div class="stat-label">缺席</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable-stat" onclick="showOverallAttendanceDetail('unchecked')">
             <div class="stat-value" style="color:var(--gray-400);">${ds.unchecked}</div>
             <div class="stat-label">未标记</div>
           </div>
@@ -296,8 +474,9 @@ async function loadDashboardByDate() {
 
     if (ds.clubBreakdown && ds.clubBreakdown.length > 0) {
       html += `<div class="card"><h3>各社团出勤明细</h3>`;
+      html += `<p class="hint" style="margin-bottom:10px;">点击社团查看详细考勤名单</p>`;
       html += ds.clubBreakdown.map(c => `
-        <div class="date-item" style="cursor:pointer;" onclick="openClub('${c.id}')">
+        <div class="date-item" style="cursor:pointer;" onclick="showClubAttendanceDetail('${c.id}','${jsStr(c.name)}','${jsStr(c.teacher)}')">
           <div class="date-info">
             <span class="date-text" style="font-size:14px;">${escapeHtml(c.name)}</span>
             <span style="font-size:12px;color:var(--gray-400);">${escapeHtml(c.teacher)}</span>
@@ -549,6 +728,7 @@ function renderDetail() {
   renderDateList();
   renderStudentManageList();
   updateEditModeUI();
+  loadClubFiles();
 }
 
 function renderDateList() {
@@ -795,6 +975,29 @@ async function transferStudent() {
 }
 
 // ============ 考勤管理 ============
+
+async function quickAttendance() {
+  if (!canEdit()) { showToast('无编辑权限'); return; }
+  const today = new Date().toISOString().split('T')[0];
+
+  // 如果今天已有考勤记录，直接打开
+  if (currentClub.attendance && currentClub.attendance[today]) {
+    openAttendance(today);
+    return;
+  }
+
+  // 否则创建今天的考勤记录
+  try {
+    await apiFetch(`/api/clubs/${currentClubId}/attendance/${today}`, {
+      method: 'PUT',
+      body: JSON.stringify({ records: {} })
+    });
+    await loadClubDetail();
+    openAttendance(today);
+  } catch (e) {
+    showToast('创建考勤失败');
+  }
+}
 
 function showAddDate() {
   if (!canEdit()) { showToast('无编辑权限'); return; }
@@ -1340,4 +1543,213 @@ async function changeAdminPassword() {
   } catch (e) {
     showToast('修改失败');
   }
+}
+
+// ============ 资源管理（教案与照片） ============
+
+let clubFiles = [];
+
+async function loadClubFiles() {
+  if (!currentClubId) return;
+  try {
+    const res = await apiFetch('/api/clubs/' + currentClubId + '/files');
+    clubFiles = await res.json();
+    renderResourceFiles();
+  } catch (e) {
+    console.error('加载文件列表失败', e);
+  }
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatFileDate(dateStr) {
+  const d = new Date(dateStr);
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+}
+
+function getFileIcon(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) return '🖼️';
+  if (['mp4', 'avi', 'mov', 'wmv', 'flv'].includes(ext)) return '🎬';
+  if (['pdf'].includes(ext)) return '📕';
+  if (['doc', 'docx'].includes(ext)) return '📘';
+  if (['ppt', 'pptx'].includes(ext)) return '📙';
+  if (['xls', 'xlsx'].includes(ext)) return '📗';
+  if (['zip', 'rar', '7z'].includes(ext)) return '🗜️';
+  if (['txt', 'md'].includes(ext)) return '📝';
+  return '📎';
+}
+
+function isImageFile(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
+}
+
+function renderResourceFiles() {
+  const lessonList = document.getElementById('lessonFileList');
+  const photoList = document.getElementById('photoFileList');
+  if (!lessonList || !photoList) return;
+
+  const lessons = clubFiles.filter(f => f.type === 'lesson');
+  const photos = clubFiles.filter(f => f.type === 'photo');
+
+  // 教案列表
+  if (lessons.length === 0) {
+    lessonList.innerHTML = '<div class="resource-empty">暂无教案文件</div>';
+  } else {
+    lessonList.innerHTML = lessons.map(f => `
+      <div class="resource-file-item">
+        <span class="resource-file-icon">${getFileIcon(f.originalName)}</span>
+        <div class="resource-file-info">
+          <div class="resource-file-name">${escapeHtml(f.originalName)}</div>
+          <div class="resource-file-meta">${formatFileSize(f.size)} · ${formatFileDate(f.uploadDate)}</div>
+        </div>
+        <div class="resource-file-actions">
+          <button onclick="downloadFile('${currentClubId}','${f.id}')" title="下载">⬇️</button>
+          ${canEdit() ? `<button class="delete" onclick="deleteFile('${currentClubId}','${f.id}','${jsStr(f.originalName)}')" title="删除">🗑️</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // 照片列表（图片显示缩略图，其他显示文件名）
+  if (photos.length === 0) {
+    photoList.innerHTML = '<div class="resource-empty">暂无照片</div>';
+  } else {
+    const imagePhotos = photos.filter(f => isImageFile(f.originalName));
+    const otherPhotos = photos.filter(f => !isImageFile(f.originalName));
+
+    let html = '';
+    if (imagePhotos.length > 0) {
+      html += '<div class="resource-photo-preview">';
+      html += imagePhotos.map(f => `
+        <div class="resource-photo-thumb-wrap">
+          <img class="resource-photo-thumb" src="${API}/api/clubs/${currentClubId}/files/${f.id}/download?token=${authToken}" alt="${escapeHtml(f.originalName)}" onclick="downloadFile('${currentClubId}','${f.id}')">
+          ${canEdit() ? `<button class="delete-overlay" onclick="deleteFile('${currentClubId}','${f.id}','${jsStr(f.originalName)}')">×</button>` : ''}
+        </div>
+      `).join('');
+      html += '</div>';
+    }
+    if (otherPhotos.length > 0) {
+      html += otherPhotos.map(f => `
+        <div class="resource-file-item">
+          <span class="resource-file-icon">${getFileIcon(f.originalName)}</span>
+          <div class="resource-file-info">
+            <div class="resource-file-name">${escapeHtml(f.originalName)}</div>
+            <div class="resource-file-meta">${formatFileSize(f.size)} · ${formatFileDate(f.uploadDate)}</div>
+          </div>
+          <div class="resource-file-actions">
+            <button onclick="downloadFile('${currentClubId}','${f.id}')" title="下载">⬇️</button>
+            ${canEdit() ? `<button class="delete" onclick="deleteFile('${currentClubId}','${f.id}','${jsStr(f.originalName)}')" title="删除">🗑️</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+    photoList.innerHTML = html;
+  }
+}
+
+async function uploadResource(event, type) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  if (!canEdit()) {
+    showToast('无权上传');
+    return;
+  }
+
+  const maxSize = 50 * 1024 * 1024;
+  if (file.size > maxSize) {
+    showToast('文件不能超过50MB');
+    return;
+  }
+
+  showToast('正在上传...');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(API + '/api/clubs/' + currentClubId + '/upload?type=' + type, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken },
+      body: formData
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      showToast('上传成功');
+      loadClubFiles();
+    } else {
+      showToast(data.error || '上传失败');
+    }
+  } catch (e) {
+    showToast('上传失败');
+  }
+}
+
+function downloadFile(clubId, fileId) {
+  window.open(API + '/api/clubs/' + clubId + '/files/' + fileId + '/download?token=' + authToken, '_blank');
+}
+
+async function deleteFile(clubId, fileId, filename) {
+  if (!confirm('确定删除「' + filename + '」吗？')) return;
+  try {
+    const res = await apiFetch('/api/clubs/' + clubId + '/files/' + fileId, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已删除');
+      loadClubFiles();
+    } else {
+      showToast(data.error || '删除失败');
+    }
+  } catch (e) {
+    showToast('删除失败');
+  }
+}
+
+// ============ 管理员资源下载 ============
+
+async function loadResourceClubs() {
+  try {
+    const res = await apiFetch('/api/clubs');
+    const clubs = await res.json();
+    const container = document.getElementById('resourceClubList');
+    if (!container) return;
+
+    if (clubs.length === 0) {
+      container.innerHTML = '<div class="resource-empty">暂无社团</div>';
+      return;
+    }
+
+    container.innerHTML = clubs.map(c => {
+      const hasFiles = c.fileCount && c.fileCount > 0;
+      return `
+        <div class="resource-club-item">
+          <div class="resource-club-info">
+            <div class="resource-club-name">${escapeHtml(c.name)}</div>
+            <div class="resource-club-count">${escapeHtml(c.teacher || '未设置老师')} · ${c.fileCount || 0} 个文件${c.lessonCount ? `（教案${c.lessonCount} / 照片${c.photoCount}）` : ''}</div>
+          </div>
+          <div class="resource-club-actions">
+            <button class="btn-small" onclick="downloadClubResources('${c.id}')" ${!hasFiles ? 'disabled style="opacity:0.5;"' : ''}>下载</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('加载社团列表失败', e);
+  }
+}
+
+function downloadAllResources(type) {
+  window.open(API + '/api/admin/download/' + type + '?token=' + authToken, '_blank');
+}
+
+function downloadClubResources(clubId) {
+  window.open(API + '/api/admin/download/club/' + clubId + '?token=' + authToken, '_blank');
 }
