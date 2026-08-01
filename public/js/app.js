@@ -1337,4 +1337,3 @@ async function changeAdminPassword() {
     showToast('修改失败');
   }
 }
-});
