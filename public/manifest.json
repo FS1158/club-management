@@ -1,11 +1,18 @@
 {
   "name": "清华附中初中社团管理系统",
   "short_name": "社团管理",
-  "description": "社团管理系统 - 多社团管理、学生名单导入、实时考勤打卡、教案照片上传",
+  "description": "清华附中初中社团管理系统：管理员统筹、教师PIN码手机考勤的轻量应用。一键打卡、仪表盘穿透查学生名单、批量导入导出、教案作业照片上传下载。无数据库、本地存储、易部署。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f0f7",
   "theme_color": "#660874",
   "orientation": "portrait",
-  "icons": []
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "960x960",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
