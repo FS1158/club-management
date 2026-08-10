@@ -107,7 +107,7 @@
           <h3>批量导入社团和学生</h3>
           <p class="hint">一次性导入所有社团和学生名单，系统自动创建社团</p>
           <div class="template-bar">
-            <span class="template-bar-text">📥 不确定格式？先下载系统模板，按列填写后上传：</span>
+            <span class="template-bar-text">📥 先下载模板，按示例填写后上传（社团名/老师各填一行，学生列表两列）：</span>
             <button class="btn-link" onclick="downloadTemplate('admin')">下载 Excel 模板</button>
           </div>
           <div class="file-upload-area" onclick="document.getElementById('bulkFileInput').click()">
@@ -116,7 +116,7 @@
             <p class="upload-formats">支持 CSV / Excel / TXT</p>
             <input type="file" id="bulkFileInput" accept=".csv,.xlsx,.xls,.txt" style="display:none" onchange="handleBulkFileUpload(event)">
           </div>
-          <p class="hint" style="margin-top:16px;">或粘贴文本，每行一条：<br>格式：社团名称,指导老师,学号,姓名<br>示例：篮球社,张老师,2024001,张三</p>
+          <p class="hint" style="margin-top:16px;">或粘贴文本（也支持旧格式每行一条）</p>
           <textarea id="bulkImportInput" rows="8" placeholder="篮球社,张老师,2024001,张三&#10;篮球社,张老师,2024002,李四&#10;合唱团,李老师,2024003,王五&#10;合唱团,李老师,2024004,赵六"></textarea>
           <button class="btn-primary" onclick="bulkImport()">一键导入</button>
         </div>
