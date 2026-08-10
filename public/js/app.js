@@ -243,6 +243,8 @@ function logout() {
   localStorage.removeItem('authToken');
   localStorage.removeItem('userRole');
   localStorage.removeItem('userClubId');
+  if (adminGuestPollTimer) { clearInterval(adminGuestPollTimer); adminGuestPollTimer = null; }
+  lastPendingCount = 0;
   navigateTo('login');
   loadClubOptions();
 }
@@ -252,6 +254,35 @@ function onClubSelectChange() {}
 // ============ 管理员界面 ============
 
 let dashboardDate = '';
+let lastPendingCount = 0;
+let adminGuestPollTimer = null;
+
+// 管理员登录期间的轮询兜底：即使 SSE 推送失效（飞书/移动端/校园网长连接不稳或不支持），
+// 也定时拉取待审批的访客申请，保证角标实时更新且有醒目提醒
+async function pollGuestRequests() {
+  try {
+    const res = await apiFetch('/api/admin/guest-requests');
+    const data = await res.json();
+    const pending = (data.requests || []).filter(r => r.status === 'pending').length;
+    const badge = document.getElementById('guestReqBadge');
+    if (badge) {
+      if (pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
+      else badge.classList.add('hidden');
+    }
+    const pendingEl = document.getElementById('guestPendingList');
+    const activeEl = document.getElementById('guestActiveList');
+    if (pendingEl && activeEl) {
+      renderGuestRequests(data.requests || [], pendingEl);
+      renderGuestActive(data.access || [], activeEl);
+      const cnt = document.getElementById('guestPendingCount');
+      if (cnt) cnt.textContent = pending;
+    }
+    if (pending > lastPendingCount) {
+      showToast('有新的访客查看申请（共 ' + pending + ' 条待审批），请到「访客审批」处理', 4500);
+    }
+    lastPendingCount = pending;
+  } catch (e) {}
+}
 
 function enterAdmin() {
   dashboardDate = new Date().toISOString().split('T')[0];
@@ -259,6 +290,10 @@ function enterAdmin() {
   loadAdminClubs();
   loadExportClubs();
   navigateTo('admin-dashboard');
+  // 启动轮询兜底：每 20 秒检查访客审批申请，保证管理员一定能收到
+  if (adminGuestPollTimer) clearInterval(adminGuestPollTimer);
+  adminGuestPollTimer = setInterval(pollGuestRequests, 20000);
+  pollGuestRequests();
 }
 
 function switchAdminTab(tab, btn) {
