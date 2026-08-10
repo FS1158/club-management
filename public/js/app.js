@@ -147,113 +147,6 @@ async function teacherLogin() {
   }
 }
 
-let guestToken = localStorage.getItem('guestToken') || '';
-let guestExpiresAt = parseInt(localStorage.getItem('guestExpiresAt') || '0', 10);
-let guestRequestId = null;
-let guestPollTimer = null;
-
-function guestHeaders() {
-  return guestToken ? { 'Authorization': 'Bearer ' + guestToken, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-}
-
-async function openGuestRequestModal() {
-  // 若本地已存有申请记录，先查询其最新状态（已通过则直接进入，无需等待）
-  const storedId = localStorage.getItem('guestRequestId');
-  if (storedId) {
-    await checkGuestRequestStatus(storedId);
-    return;
-  }
-  showGuestRequestForm();
-}
-
-function showGuestRequestForm() {
-  document.getElementById('guestModalTitle').textContent = '申请访客查看';
-  document.getElementById('guestRequestForm').classList.remove('hidden');
-  document.getElementById('guestRequestPending').classList.add('hidden');
-  document.getElementById('guestRequestSuccess').classList.add('hidden');
-  document.getElementById('guestRequestRejected').classList.add('hidden');
-  document.getElementById('guestRequestNote').value = '';
-  document.getElementById('modal-guest-request').classList.remove('hidden');
-}
-
-// 查询某条申请的状态：已通过 → 直接进入；审核中/被拒 → 对应提示；失效 → 回到表单
-async function checkGuestRequestStatus(requestId) {
-  try {
-    const res = await fetch(API + '/api/guest/await-approval/' + requestId);
-    const data = await res.json();
-    if (data.status === 'approved' && data.token) {
-      enterGuestView(data.token, data.expiresAt);
-      return;
-    }
-    if (data.status === 'pending') {
-      document.getElementById('guestModalTitle').textContent = '申请状态';
-      document.getElementById('guestRequestForm').classList.add('hidden');
-      document.getElementById('guestRequestPending').classList.remove('hidden');
-      document.getElementById('guestRequestSuccess').classList.add('hidden');
-      document.getElementById('guestRequestRejected').classList.add('hidden');
-      document.getElementById('modal-guest-request').classList.remove('hidden');
-      return;
-    }
-    if (data.status === 'rejected') {
-      // 已拒绝：清理记录，允许重新申请
-      localStorage.removeItem('guestRequestId');
-      document.getElementById('guestModalTitle').textContent = '申请状态';
-      document.getElementById('guestRequestForm').classList.add('hidden');
-      document.getElementById('guestRequestPending').classList.add('hidden');
-      document.getElementById('guestRequestSuccess').classList.add('hidden');
-      document.getElementById('guestRequestRejected').classList.remove('hidden');
-      document.getElementById('modal-guest-request').classList.remove('hidden');
-      return;
-    }
-    // notfound / expired：清理并展示表单
-    localStorage.removeItem('guestRequestId');
-    showGuestRequestForm();
-  } catch (e) {
-    localStorage.removeItem('guestRequestId');
-    showGuestRequestForm();
-  }
-}
-
-async function submitGuestRequest() {
-  const note = document.getElementById('guestRequestNote').value.trim();
-  try {
-    const res = await fetch(API + '/api/guest/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note })
-    });
-    const data = await res.json();
-    if (!data.requestId) { showToast('申请提交失败'); return; }
-    // 保存申请 ID，便于稍后回来查询结果（无需停留在页面等待）
-    localStorage.setItem('guestRequestId', data.requestId);
-    guestRequestId = data.requestId;
-    // 显示成功提示：访客可随时关闭/离开界面
-    document.getElementById('guestModalTitle').textContent = '提交成功';
-    document.getElementById('guestRequestForm').classList.add('hidden');
-    document.getElementById('guestRequestPending').classList.add('hidden');
-    document.getElementById('guestRequestSuccess').classList.remove('hidden');
-    document.getElementById('guestRequestRejected').classList.add('hidden');
-  } catch (e) {
-    showToast('网络错误，申请失败');
-  }
-}
-
-function cancelGuestRequest() {
-  closeModal('modal-guest-request');
-}
-
-function enterGuestView(token, expiresAt) {
-  guestToken = token;
-  guestExpiresAt = expiresAt;
-  localStorage.setItem('guestToken', token);
-  localStorage.setItem('guestExpiresAt', String(expiresAt));
-  userRole = 'guest';
-  localStorage.setItem('userRole', 'guest');
-  if (guestPollTimer) { clearTimeout(guestPollTimer); guestPollTimer = null; }
-  closeModal('modal-guest-request');
-  loadGuestClubs();
-  navigateTo('guest');
-}
 
 function logout() {
   if (authToken) {
@@ -265,7 +158,6 @@ function logout() {
   localStorage.removeItem('authToken');
   localStorage.removeItem('userRole');
   localStorage.removeItem('userClubId');
-  if (adminGuestPollTimer) { clearInterval(adminGuestPollTimer); adminGuestPollTimer = null; }
   lastPendingCount = 0;
   navigateTo('login');
   loadClubOptions();
@@ -277,45 +169,6 @@ function onClubSelectChange() {}
 
 let dashboardDate = '';
 let lastPendingCount = 0;
-let adminGuestPollTimer = null;
-
-// 管理员登录期间的轮询兜底：即使 SSE 推送失效（飞书/移动端/校园网长连接不稳或不支持），
-// 也定时拉取待审批的访客申请，保证角标实时更新且有醒目提醒
-async function pollGuestRequests() {
-  try {
-    const res = await apiFetch('/api/admin/guest-requests');
-    const data = await res.json();
-    const pending = (data.requests || []).filter(r => r.status === 'pending').length;
-    const badge = document.getElementById('guestReqBadge');
-    if (badge) {
-      if (pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
-      else badge.classList.add('hidden');
-    }
-    // 仪表盘顶部常驻提醒横幅：即使错过 toast 也能一眼看到
-    const banner = document.getElementById('guestApprovalBanner');
-    if (banner) {
-      if (pending > 0) {
-        const cnt = document.getElementById('guestApprovalCount');
-        if (cnt) cnt.textContent = pending;
-        banner.classList.remove('hidden');
-      } else {
-        banner.classList.add('hidden');
-      }
-    }
-    const pendingEl = document.getElementById('guestPendingList');
-    const activeEl = document.getElementById('guestActiveList');
-    if (pendingEl && activeEl) {
-      renderGuestRequests(data.requests || [], pendingEl);
-      renderGuestActive(data.access || [], activeEl);
-      const cnt = document.getElementById('guestPendingCount');
-      if (cnt) cnt.textContent = pending;
-    }
-    if (pending > lastPendingCount) {
-      showToast('有新的访客查看申请（共 ' + pending + ' 条待审批），请到「访客审批」处理', 4500);
-    }
-    lastPendingCount = pending;
-  } catch (e) {}
-}
 
 function enterAdmin() {
   dashboardDate = new Date().toISOString().split('T')[0];
@@ -323,10 +176,6 @@ function enterAdmin() {
   loadAdminClubs();
   loadExportClubs();
   navigateTo('admin-dashboard');
-  // 启动轮询兜底：每 10 秒检查访客审批申请，保证管理员一定能收到通知
-  if (adminGuestPollTimer) clearInterval(adminGuestPollTimer);
-  adminGuestPollTimer = setInterval(pollGuestRequests, 10000);
-  pollGuestRequests();
 }
 
 function switchAdminTab(tab, btn) {
@@ -335,7 +184,6 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('adminTab-' + tab).classList.add('active');
   if (tab === 'resources') loadResourceClubs();
-  if (tab === 'guest') loadGuestRequests();
 }
 
 async function loadDashboard() {
@@ -715,192 +563,8 @@ async function loadExportClubs() {
   `).join('');
 }
 
-// ============ 社团列表（访客） ============
 
-async function loadClubs(containerId) {
-  try {
-    const res = await fetch(API + '/api/clubs');
-    allClubs = await res.json();
-    renderClubList(allClubs, containerId);
-  } catch (e) {
-    document.getElementById(containerId).innerHTML = '<div class="loading">加载失败</div>';
-  }
-}
 
-// ============ 访客只读加载 ============
-
-function renderGuestBanner() {
-  const banners = document.querySelectorAll('.guest-banner');
-  if (!banners.length) return;
-  if (!guestToken || guestExpiresAt <= Date.now()) {
-    banners.forEach(b => b.style.display = 'none');
-    return;
-  }
-  const expire = new Date(guestExpiresAt);
-  const hh = String(expire.getHours()).padStart(2, '0');
-  const mm = String(expire.getMinutes()).padStart(2, '0');
-  const html = `👁️ 访客临时查看权限 · 有效期至 ${expire.getMonth() + 1}月${expire.getDate()}日 ${hh}:${mm} · <b>仅可查看，不可操作</b>`;
-  banners.forEach(b => { b.style.display = ''; b.innerHTML = html; });
-}
-
-async function loadGuestClubs() {
-  renderGuestBanner();
-  const container = document.getElementById('guestClubList');
-  container.innerHTML = '<div class="loading">加载中...</div>';
-  try {
-    const res = await fetch(API + '/api/guest/clubs', { headers: guestHeaders() });
-    if (res.status === 401) {
-      // 令牌失效，清除并返回登录页
-      guestToken = ''; localStorage.removeItem('guestToken');
-      localStorage.removeItem('guestExpiresAt');
-      showToast('访客权限已失效，请重新申请');
-      navigateTo('login');
-      return;
-    }
-    const clubs = await res.json();
-    allClubs = clubs;
-    renderClubList(clubs, 'guestClubList', 'openGuestClub');
-  } catch (e) {
-    container.innerHTML = '<div class="loading">加载失败</div>';
-  }
-}
-
-async function loadGuestOverview() {
-  const date = document.getElementById('guestOverviewDate').value;
-  const box = document.getElementById('guestOverviewResult');
-  if (!date) { showToast('请先选择日期'); return; }
-  box.innerHTML = '<div class="loading">加载中...</div>';
-  try {
-    const res = await fetch(API + '/api/guest/overview?date=' + encodeURIComponent(date), { headers: guestHeaders() });
-    if (res.status === 401) {
-      guestToken = ''; localStorage.removeItem('guestToken');
-      localStorage.removeItem('guestExpiresAt');
-      showToast('访客权限已失效，请重新申请');
-      navigateTo('login');
-      return;
-    }
-    const data = await res.json();
-    renderGuestOverview(data);
-  } catch (e) {
-    box.innerHTML = '<div class="loading">加载失败</div>';
-  }
-}
-
-function renderGuestOverview(data) {
-  const box = document.getElementById('guestOverviewResult');
-  if (!data.clubs || data.clubs.length === 0) {
-    box.innerHTML = '<div class="empty-state" style="padding:20px;"><p>暂无社团</p></div>';
-    return;
-  }
-  const rows = data.clubs.map(c => `
-    <tr>
-      <td style="text-align:left;padding-left:10px;">${escapeHtml(c.name)}</td>
-      <td>${c.teacher || '未设'}</td>
-      <td>${c.total}</td>
-      <td style="color:var(--success);font-weight:600;">${c.present}</td>
-      <td style="color:var(--warning);">${c.late}</td>
-      <td style="color:var(--danger);">${c.absent}</td>
-      <td style="color:var(--gray-400);">${c.unchecked}</td>
-    </tr>
-  `).join('');
-  const t = data.totals;
-  box.innerHTML = `
-    <div style="font-size:13px;color:var(--gray-500);margin-bottom:6px;">${formatDate(data.date)} ${getWeekday(data.date)} · 全部社团考勤概览</div>
-    <table class="guest-overview-table">
-      <thead><tr><th style="text-align:left;padding-left:10px;">社团</th><th>老师</th><th>应到</th><th>到勤</th><th>迟到</th><th>缺席</th><th>未标记</th></tr></thead>
-      <tbody>
-        ${rows}
-        <tr class="guest-overview-totals"><td style="text-align:left;padding-left:10px;">合计</td><td>—</td><td>${t.total}</td><td>${t.present}</td><td>${t.late}</td><td>${t.absent}</td><td>${t.unchecked}</td></tr>
-      </tbody>
-    </table>
-  `;
-}
-
-// 访客点击某社团 -> 只读详情（不使用 authToken，避免 401 触发登出）
-let guestCurrentClub = null;
-
-async function openGuestClub(id) {
-  try {
-    const res = await fetch(API + '/api/guest/clubs/' + id, { headers: guestHeaders() });
-    if (res.status === 401) {
-      guestToken = ''; localStorage.removeItem('guestToken'); localStorage.removeItem('guestExpiresAt');
-      showToast('访客权限已失效，请重新申请');
-      navigateTo('login');
-      return;
-    }
-    if (!res.ok) { showToast('加载失败'); return; }
-    const club = await res.json();
-    guestCurrentClub = club;
-    renderGuestDetail(club);
-    renderGuestBanner();
-    navigateTo('guest-detail');
-  } catch (e) {
-    showToast('加载失败');
-  }
-}
-
-function renderGuestDetail(club) {
-  document.getElementById('guestDetailTitle').textContent = club.name;
-  document.getElementById('guestDetailMeta').textContent =
-    (club.teacher || '未设置') + ' · ' + (club.students || []).length + ' 人';
-
-  const dates = Object.keys(club.attendance || {}).sort().reverse();
-  const body = document.getElementById('guestDetailBody');
-
-  if (dates.length === 0) {
-    body.innerHTML = '<div class="empty-state" style="padding:30px 10px;"><p style="font-size:14px;">该社团暂无考勤记录</p></div>';
-    return;
-  }
-
-  const statusLabel = { present: '到勤', late: '迟到', absent: '缺席', unchecked: '未标记' };
-  const statusClass = { present: 'tag-present', late: 'tag-late', absent: 'tag-absent', unchecked: 'tag-unchecked' };
-
-  let html = '';
-  dates.forEach(date => {
-    const records = club.attendance[date] || {};
-    const students = (club.students || []).map(s => {
-      const st = records[s.id] || 'unchecked';
-      return `<li class="guest-stu-item"><span class="guest-stu-name">${escapeHtml(s.name)}</span><span class="guest-stu-id">${escapeHtml(s.id)}</span><span class="status-tag ${statusClass[st]}">${statusLabel[st]}</span></li>`;
-    }).join('');
-    const counts = { present: 0, late: 0, absent: 0, unchecked: 0 };
-    (club.students || []).forEach(s => { counts[records[s.id] || 'unchecked']++; });
-    html += `
-      <div class="guest-date-card">
-        <div class="guest-date-head">
-          <span class="guest-date-title">${formatDate(date)} ${getWeekday(date)}</span>
-          <span class="guest-date-count">到勤${counts.present} · 迟到${counts.late} · 缺席${counts.absent}</span>
-        </div>
-        <ul class="guest-stu-list">${students}</ul>
-      </div>`;
-  });
-  body.innerHTML = html;
-}
-
-function renderClubList(clubs, containerId, clickHandler = 'openClub') {
-  const container = document.getElementById(containerId);
-  if (!clubs || clubs.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>暂无社团</p></div>`;
-    return;
-  }
-  container.innerHTML = clubs.map(c => `
-    <div class="club-card" onclick="${clickHandler}('${c.id}')">
-      <div class="club-icon">${escapeHtml(c.name.charAt(0))}</div>
-      <div class="club-info">
-        <div class="club-name">${escapeHtml(c.name)}</div>
-        <div class="club-meta">${escapeHtml(c.teacher || '未设置')} · ${c.studentCount}人</div>
-      </div>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gray-300)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>
-  `).join('');
-}
-
-function filterClubs() {
-  const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
-  const filtered = keyword
-    ? allClubs.filter(c => c.name.toLowerCase().includes(keyword) || (c.teacher && c.teacher.toLowerCase().includes(keyword)))
-    : allClubs;
-  renderClubList(filtered, 'guestClubList', 'openGuestClub');
-}
 
 // ============ 全局学生搜索 ============
 
@@ -913,7 +577,7 @@ function goBackFromSearch() {
   } else if (userRole === 'teacher') {
     navigateTo('detail');
   } else {
-    navigateTo('guest');
+    navigateTo('login');
   }
 }
 
@@ -985,7 +649,7 @@ function goBackFromDetail() {
     navigateTo('login');
     logout();
   } else {
-    navigateTo('guest');
+    navigateTo('login');
   }
 }
 
@@ -996,10 +660,8 @@ async function openClub(id) {
   navigateTo('detail');
 }
 
-// 按角色分流：访客走只读详情，其余走教师/管理员详情
 function navigateClub(id) {
-  if (userRole === 'guest') openGuestClub(id);
-  else openClub(id);
+  openClub(id);
 }
 
 async function loadClubDetail() {
@@ -1962,146 +1624,14 @@ function handleSSEMessage(msg) {
         loadExportClubs();
       }
     }
-    if (document.getElementById('page-guest').classList.contains('active')) {
-      renderClubList(allClubs, 'guestClubList', 'openGuestClub');
-    }
     if (msg.type === 'bulk_imported' && document.getElementById('page-admin-dashboard').classList.contains('active')) {
       loadClubOptions();
     }
   });
 
-  // 访客申请 / 审批通知
-  if (msg.type === 'guest_request') {
-    if (userRole === 'admin') {
-      updateGuestBadge(1);
-      showToast('有新访客申请查看考勤，请到「访客审批」处理');
-      if (document.getElementById('adminTab-guest').classList.contains('active')) {
-        loadGuestRequests();
-      }
-    }
-  }
-  if (msg.type === 'guest_approved' || msg.type === 'guest_rejected') {
-    if (userRole === 'admin' && document.getElementById('adminTab-guest').classList.contains('active')) {
-      loadGuestRequests();
-    }
-  }
 }
 
-function updateGuestBadge(delta) {
-  const badge = document.getElementById('guestReqBadge');
-  if (!badge) return;
-  let cur = parseInt(badge.textContent || '0', 10) || 0;
-  cur = Math.max(0, cur + delta);
-  if (cur > 0) { badge.textContent = cur; badge.classList.remove('hidden'); }
-  else { badge.classList.add('hidden'); }
-}
 
-// ============ 访客审批（管理员） ============
-
-async function loadGuestRequests() {
-  const pendingEl = document.getElementById('guestPendingList');
-  const activeEl = document.getElementById('guestActiveList');
-  if (!pendingEl || !activeEl) return;
-  try {
-    const res = await apiFetch('/api/admin/guest-requests');
-    const data = await res.json();
-    renderGuestRequests(data.requests || [], pendingEl);
-    renderGuestActive(data.access || [], activeEl);
-    document.getElementById('guestPendingCount').textContent = (data.requests || []).filter(r => r.status === 'pending').length;
-    // 更新角标
-    const pending = (data.requests || []).filter(r => r.status === 'pending').length;
-    const badge = document.getElementById('guestReqBadge');
-    if (pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
-    else badge.classList.add('hidden');
-  } catch (e) {
-    pendingEl.innerHTML = '<div class="loading">加载失败</div>';
-  }
-}
-
-function renderGuestRequests(requests, el) {
-  const pending = requests.filter(r => r.status === 'pending');
-  if (pending.length === 0) {
-    el.innerHTML = '<p style="color:var(--gray-400);font-size:13px;padding:6px 0;">暂无待审批申请</p>';
-    return;
-  }
-  const fmtTime = ts => {
-    const d = new Date(ts);
-    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  };
-  el.innerHTML = pending.map(r => `
-    <div class="guest-req-item">
-      <div class="guest-req-info">
-        <div class="guest-req-note">${escapeHtml(r.note || '未填写事由')}</div>
-        <div class="guest-req-time">申请时间：${fmtTime(r.requestedAt)}</div>
-      </div>
-      <div class="guest-req-actions">
-        <button class="btn-small btn-approve" onclick="approveGuestRequest('${r.id}')">通过</button>
-        <button class="btn-small btn-reject" onclick="rejectGuestRequest('${r.id}')">拒绝</button>
-      </div>
-    </div>
-  `).join('') + `
-    <details style="margin-top:8px;">
-      <summary style="cursor:pointer;font-size:12px;color:#999;">查看已处理（${requests.length - pending.length}）</summary>
-      <div style="margin-top:6px;">
-        ${requests.filter(r => r.status !== 'pending').map(r => `
-          <div style="font-size:12px;color:#999;padding:3px 0;">${escapeHtml(r.note || '未填写')} · ${r.status === 'approved' ? '已通过' : '已拒绝'}</div>
-        `).join('') || '<span style="font-size:12px;color:#bbb;">无</span>'}
-      </div>
-    </details>
-  `;
-}
-
-function renderGuestActive(access, el) {
-  if (access.length === 0) {
-    el.innerHTML = '<p style="color:var(--gray-400);font-size:13px;padding:6px 0;">暂无生效令牌</p>';
-    return;
-  }
-  const fmt = ts => {
-    const d = new Date(ts);
-    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  };
-  el.innerHTML = access.map(a => `
-    <div class="guest-req-item">
-      <div class="guest-req-info">
-        <div class="guest-req-note">${escapeHtml(a.note || '访客')} · 有效期至 ${fmt(a.expiresAt)}</div>
-        <div class="guest-req-time">令牌：${a.token.slice(0, 10)}…（仅查看权限）</div>
-      </div>
-      <div class="guest-req-actions">
-        <button class="btn-small btn-reject" onclick="revokeGuestToken('${a.token}')">撤销</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function approveGuestRequest(id) {
-  try {
-    const res = await apiFetch('/api/admin/guest/approve/' + id, { method: 'POST' });
-    const data = await res.json();
-    if (data.token) {
-      showToast('已通过，访客可在 24 小时内查看', 3000);
-      loadGuestRequests();
-    } else {
-      showToast(data.error || '操作失败');
-    }
-  } catch (e) { showToast('操作失败'); }
-}
-
-async function rejectGuestRequest(id) {
-  try {
-    await apiFetch('/api/admin/guest/reject/' + id, { method: 'POST' });
-    showToast('已拒绝');
-    loadGuestRequests();
-  } catch (e) { showToast('操作失败'); }
-}
-
-async function revokeGuestToken(token) {
-  if (!confirm('撤销后该访客将立即无法查看，确定？')) return;
-  try {
-    await apiFetch('/api/admin/guest/revoke', { method: 'POST', body: JSON.stringify({ token }) });
-    showToast('已撤销');
-    loadGuestRequests();
-  } catch (e) { showToast('操作失败'); }
-}
 
 // ============ 初始化 ============
 
@@ -2109,20 +1639,9 @@ window.addEventListener('DOMContentLoaded', () => {
   loadClubOptions();
   connectSSE();
 
-  // 访客：若本地仍存有有效临时令牌，直接进入访客页
-  if (userRole === 'guest' && guestToken && guestExpiresAt > Date.now()) {
-    enterGuestView(guestToken, guestExpiresAt);
-  } else if (userRole === 'guest') {
-    // 令牌已失效，清除
-    localStorage.removeItem('guestToken');
-    localStorage.removeItem('guestExpiresAt');
-    localStorage.removeItem('userRole');
-    userRole = '';
-    guestToken = '';
-  }
 
   // 检查已保存的管理员/教师登录状态
-  if (authToken && userRole && userRole !== 'guest') {
+  if (authToken && userRole) {
     // 验证token是否仍然有效
     fetch(API + '/api/auth/check', { headers: authHeaders() })
       .then(res => {
