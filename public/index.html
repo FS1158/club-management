@@ -51,8 +51,7 @@
         <div class="login-divider">
           <span>或</span>
         </div>
-        <button class="btn-guest" onclick="openGuestRequestModal()">以访客身份查看考勤</button>
-        <button class="btn-guest" onclick="enterSearchPage()" style="margin-top:10px;">🔍 查找学生所在社团</button>
+        <button class="btn-guest" onclick="enterSearchPage()">🔍 查找学生所在社团</button>
       </div>
     </div>
 
@@ -75,16 +74,10 @@
         <button class="admin-nav-btn" onclick="switchAdminTab('export', this)">导出报表</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('resources', this)">资源下载</button>
         <button class="admin-nav-btn" onclick="switchAdminTab('settings', this)">系统设置</button>
-        <button class="admin-nav-btn" onclick="switchAdminTab('guest', this)">访客审批<span id="guestReqBadge" class="nav-badge hidden">0</span></button>
       </div>
 
       <div id="adminTab-dashboard" class="admin-tab active">
       <div id="dashboardStats"></div>
-      <div id="guestApprovalBanner" class="guest-approval-banner hidden">
-        <span class="gab-icon">🔔</span>
-        <span class="gab-text">有 <b id="guestApprovalCount">0</b> 条访客查看申请待审批</span>
-        <button class="btn-small btn-approve" onclick="switchAdminTab('guest', this)">前往审批</button>
-      </div>
       <div id="dashboardDateStats"></div>
         <div class="card">
           <div class="attendance-header">
@@ -198,16 +191,6 @@
         </details>
       </div>
 
-      <div id="adminTab-guest" class="admin-tab">
-        <div class="card">
-          <h3>访客查看审批</h3>
-          <p class="hint">访客提交「查看考勤」申请后，需在此审批。通过后生成 <b>24 小时</b> 临时查看令牌（仅可查看全部社团考勤，不可编辑/操作）。</p>
-          <h4 style="margin:18px 0 8px;font-size:14px;color:var(--thu-purple);">待审批申请（<span id="guestPendingCount">0</span>）</h4>
-          <div id="guestPendingList"></div>
-          <h4 style="margin:18px 0 8px;font-size:14px;color:var(--thu-purple);">当前生效的访客令牌</h4>
-          <div id="guestActiveList"></div>
-        </div>
-      </div>
     </div>
 
     <!-- ========== 社团详情页（通用） ========== -->
@@ -362,44 +345,6 @@
       </div>
     </div>
 
-    <!-- ========== 访客社团列表页 ========== -->
-    <div id="page-guest" class="page">
-      <header class="app-header">
-        <button class="btn-icon" onclick="navigateTo('login')" aria-label="返回">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <h1>社团考勤查看</h1>
-        <button class="btn-icon" onclick="enterSearchPage()" aria-label="查找学生">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </button>
-      </header>
-      <div id="guestBanner" class="guest-banner"></div>
-      <div class="guest-overview-bar">
-        <input type="date" id="guestOverviewDate" class="login-input" style="flex:1;max-width:200px;">
-        <button class="btn-secondary" onclick="loadGuestOverview()">查看全部考勤</button>
-      </div>
-      <div id="guestOverviewResult"></div>
-      <div class="search-bar">
-        <input type="text" id="searchInput" placeholder="搜索社团名称..." oninput="filterClubs()">
-      </div>
-      <div id="guestClubList" class="club-list"></div>
-    </div>
-
-    <!-- ========== 访客社团只读详情页 ========== -->
-    <div id="page-guest-detail" class="page">
-      <header class="app-header">
-        <button class="btn-icon" onclick="navigateTo('guest')" aria-label="返回">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <h1 id="guestDetailTitle">社团详情</h1>
-        <span style="width:24px;"></span>
-      </header>
-      <div id="guestBanner" class="guest-banner"></div>
-      <div id="guestDetailMeta" class="guest-detail-meta"></div>
-      <div class="guest-readonly-tip">🔒 访客只读模式 · 仅可查看，不可操作</div>
-      <div id="guestDetailBody" class="guest-detail-body"></div>
-    </div>
-
     <!-- ========== 全局学生搜索页 ========== -->
     <div id="page-search" class="page">
       <header class="app-header">
@@ -507,45 +452,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-
-  <!-- ========== 访客申请查看弹窗 ========== -->
-  <div id="modal-guest-request" class="modal-overlay hidden" onclick="closeModal('modal-guest-request', event)">
-    <div class="modal" style="max-width:360px;">
-      <h3 id="guestModalTitle">申请访客查看</h3>
-
-      <!-- 提交表单 -->
-      <div id="guestRequestForm">
-        <p class="hint">填写身份或事由后提交申请。提交后您可<b>随时关闭本页面</b>，无需等待。管理员审批通过后（令牌最长 24 小时有效），再次点击下方「以访客身份查看考勤」即可进入，查看全部社团考勤（仅查看，不可操作）。</p>
-        <input id="guestRequestNote" type="text" class="login-input" placeholder="请填写身份或事由，如：家长参观 / 教务处检查" maxlength="50">
-        <button class="btn-login" id="guestRequestSubmitBtn" onclick="submitGuestRequest()">提交申请</button>
-        <button class="btn-link" id="guestRequestCancelBtn" onclick="cancelGuestRequest()">取消</button>
-      </div>
-
-      <!-- 审核中 -->
-      <div id="guestRequestPending" class="hidden" style="text-align:center;padding:8px 0;">
-        <div style="font-size:36px;margin-bottom:4px;">⏳</div>
-        <p style="font-size:15px;color:var(--gray-700);font-weight:600;">申请审核中</p>
-        <p style="font-size:13px;color:var(--gray-500);margin-top:8px;line-height:1.6;">管理员尚未审批。您可以先关闭本页面，稍后再次点击「以访客身份查看考勤」查看结果。</p>
-        <button class="btn-link" onclick="cancelGuestRequest()">关闭</button>
-      </div>
-
-      <!-- 提交成功 -->
-      <div id="guestRequestSuccess" class="hidden" style="text-align:center;padding:8px 0;">
-        <div style="font-size:36px;margin-bottom:4px;">✅</div>
-        <p style="font-size:15px;color:var(--success);font-weight:600;">申请已提交！</p>
-        <p style="font-size:13px;color:var(--gray-500);margin-top:8px;line-height:1.6;">您可以随时关闭本页面。管理员审批通过后，再次点击「以访客身份查看考勤」即可进入查看（24 小时内有效）。</p>
-        <button class="btn-login" onclick="cancelGuestRequest()">我知道了</button>
-      </div>
-
-      <!-- 被拒绝 -->
-      <div id="guestRequestRejected" class="hidden" style="text-align:center;padding:8px 0;">
-        <div style="font-size:36px;margin-bottom:4px;">⛔</div>
-        <p style="font-size:15px;color:var(--danger);font-weight:600;">申请未通过</p>
-        <p style="font-size:13px;color:var(--gray-500);margin-top:8px;line-height:1.6;">管理员拒绝了本次申请。如需查看，请重新提交。</p>
-        <button class="btn-login" id="guestRequestResubmitBtn" onclick="showGuestRequestForm()">重新申请</button>
-      </div>
-    </div>
-  </div>
 
   <!-- SheetJS 本地引入：不依赖外网 CDN，校园网/离线环境也能导入 Excel -->
   <script src="js/xlsx.full.min.js" onerror="console.error('SheetJS 本地库加载失败：xlsx 导入将不可用，请检查 public/js/xlsx.full.min.js 是否存在')"></script>
