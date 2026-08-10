@@ -14,8 +14,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============ 数据存储 ============
-const DATA_FILE = path.join(__dirname, 'data.json');
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+// 数据根目录：考勤数据、照片、备份统一存放。
+// 默认 D:\club-management-data（避免撑大 C 盘）；部署到其他机器可用环境变量 DATA_ROOT 覆盖（如 Linux 服务器路径）。
+const DATA_ROOT = process.env.DATA_ROOT || 'D:\\club-management-data';
+const DATA_FILE = path.join(DATA_ROOT, 'data.json');
+const UPLOAD_DIR = path.join(DATA_ROOT, 'uploads');
 
 // 确保上传目录存在
 function ensureUploadDir(clubId, type) {
@@ -63,7 +66,7 @@ function saveData(data) {
 
 // ============ 数据自动备份 ============
 // 备份目录：可用环境变量 BACKUP_DIR 指定（如 D:\club-backups），默认在程序目录下 backups/
-const BACKUP_DIR = process.env.BACKUP_DIR || path.join(__dirname, 'backups');
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_ROOT, 'backups');
 const BACKUP_KEEP = 30; // 保留最近 30 份
 
 function ensureBackupDir() {
