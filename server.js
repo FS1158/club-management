@@ -61,6 +61,84 @@ function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
+// ============ 数据自动备份 ============
+// 备份目录：可用环境变量 BACKUP_DIR 指定（如 D:\club-backups），默认在程序目录下 backups/
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(__dirname, 'backups');
+const BACKUP_KEEP = 30; // 保留最近 30 份
+
+function ensureBackupDir() {
+  if (!fs.existsSync(BACKUP_DIR)) {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  }
+}
+
+function ts() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+// 仅当 data.json 合法时才备份，避免把损坏数据存成备份
+function backupData(notify) {
+  try {
+    JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')); // 校验合法性
+    ensureBackupDir();
+    const dest = path.join(BACKUP_DIR, `data-${ts()}.json`);
+    fs.copyFileSync(DATA_FILE, dest);
+    // 轮换：仅保留最近 BACKUP_KEEP 份
+    const files = fs.readdirSync(BACKUP_DIR)
+      .filter(f => f.startsWith('data-') && f.endsWith('.json'))
+      .sort();
+    while (files.length > BACKUP_KEEP) {
+      fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
+    }
+    if (notify) console.log(`[备份] 已备份 data.json -> ${dest}`);
+  } catch (e) {
+    console.error('[备份] 备份失败:', e.message);
+  }
+}
+
+function listBackups() {
+  ensureBackupDir();
+  return fs.readdirSync(BACKUP_DIR)
+    .filter(f => f.startsWith('data-') && f.endsWith('.json'))
+    .sort()
+    .reverse(); // 最新在前
+}
+
+// 从指定备份恢复 data.json；成功返回 true
+function restoreFromBackup(filename) {
+  if (!filename || !/^data-.*\.json$/.test(filename)) return false;
+  const src = path.join(BACKUP_DIR, filename);
+  if (!fs.existsSync(src)) return false;
+  try {
+    const content = fs.readFileSync(src, 'utf-8');
+    JSON.parse(content); // 校验
+    fs.copyFileSync(src, DATA_FILE);
+    return true;
+  } catch (e) {
+    console.error('[恢复] 恢复失败:', e.message);
+    return false;
+  }
+}
+
+// 启动自检：若 data.json 损坏，尝试自动从最新备份恢复
+function startupIntegrityCheck() {
+  try {
+    JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    return true; // 正常
+  } catch (e) {
+    console.error('[自检] data.json 损坏，尝试从备份自动恢复...');
+    const files = listBackups();
+    if (files.length > 0 && restoreFromBackup(files[0])) {
+      console.log(`[自检] 已从备份 ${files[0]} 自动恢复`);
+      return true;
+    }
+    console.error('[自检] 无可用备份，将使用默认空数据（数据可能已丢失）');
+    return false;
+  }
+}
+
 // 初始化数据（含升级旧数据）
 function initData() {
   if (!fs.existsSync(DATA_FILE)) {
@@ -1002,6 +1080,31 @@ app.get('/api/admin/download/club/:clubId', authMiddleware('admin'), (req, res) 
   archive.finalize();
 });
 
+// ============ 数据备份与恢复（管理员） ============
+// 列出所有备份
+app.get('/api/admin/backups', authMiddleware('admin'), (req, res) => {
+  res.json({ backups: listBackups(), backupDir: BACKUP_DIR });
+});
+
+// 立即手动备份一次
+app.post('/api/admin/backup-now', authMiddleware('admin'), (req, res) => {
+  backupData(false);
+  res.json({ success: true, count: listBackups().length });
+});
+
+// 从指定备份恢复
+app.post('/api/admin/restore', authMiddleware('admin'), (req, res) => {
+  const { file } = req.body || {};
+  if (!file) return res.status(400).json({ error: '请指定备份文件' });
+  const ok = restoreFromBackup(file);
+  if (ok) {
+    broadcast({ type: 'data_restored' });
+    res.json({ success: true, restored: file });
+  } else {
+    res.status(400).json({ error: '恢复失败：备份不存在或已损坏' });
+  }
+});
+
 // SPA 回退
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -1010,4 +1113,10 @@ app.get('*', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`清华附中社团管理系统已启动: http://localhost:${PORT}`);
   console.log(`管理员默认密码: admin123`);
+  // 启动自检：data.json 损坏则自动从最新备份恢复
+  startupIntegrityCheck();
+  // 启动后不久做一份初始备份，确保随时有副本
+  setTimeout(() => backupData(true), 5000);
+  // 每日自动备份（每 24 小时）
+  setInterval(backupData, 24 * 60 * 60 * 1000);
 });

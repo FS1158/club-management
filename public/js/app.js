@@ -1559,6 +1559,67 @@ async function changeAdminPassword() {
   }
 }
 
+// ============ 数据备份与恢复 ============
+async function openBackupModal() {
+  try {
+    const res = await apiFetch('/api/admin/backups');
+    const data = await res.json();
+    document.getElementById('backupDirHint').textContent = '备份位置：' + (data.backupDir || '未知');
+    const list = document.getElementById('backupList');
+    if (!data.backups || data.backups.length === 0) {
+      list.innerHTML = '<p class="hint">暂无备份</p>';
+    } else {
+      list.innerHTML = data.backups.map(f =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;">
+           <span style="font-size:13px;">${f}</span>
+           <button class="btn-small" onclick="restoreBackup('${f}')">恢复</button>
+         </div>`
+      ).join('');
+    }
+    openModalBackup();
+  } catch (e) {
+    showToast('获取备份列表失败');
+  }
+}
+
+function openModalBackup() {
+  document.getElementById('modal-backup').classList.remove('hidden');
+}
+
+async function backupNow() {
+  try {
+    const res = await apiFetch('/api/admin/backup-now', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已备份，当前共 ' + data.count + ' 份');
+      openBackupModal();
+    } else {
+      showToast('备份失败');
+    }
+  } catch (e) {
+    showToast('备份失败');
+  }
+}
+
+async function restoreBackup(file) {
+  if (!confirm('确定要从备份《' + file + '》恢复考勤数据吗？当前数据将被覆盖。')) return;
+  try {
+    const res = await apiFetch('/api/admin/restore', {
+      method: 'POST',
+      body: JSON.stringify({ file })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已从《' + file + '》恢复');
+      setTimeout(() => closeModal('modal-backup'), 1200);
+    } else {
+      showToast(data.error || '恢复失败');
+    }
+  } catch (e) {
+    showToast('恢复失败');
+  }
+}
+
 // ============ 资源管理（教案与照片） ============
 
 let clubFiles = [];

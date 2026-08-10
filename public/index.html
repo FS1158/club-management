@@ -180,6 +180,12 @@
           <input type="password" id="confirmAdminPassword" placeholder="再次输入新密码" class="login-input" style="margin-bottom:12px;">
           <button class="btn-primary" onclick="changeAdminPassword()">确认修改</button>
         </div>
+
+        <details class="card" style="margin-top:12px;">
+          <summary style="cursor:pointer;font-size:13px;color:#888;">🛡️ 数据备份与恢复（仅出问题时使用）</summary>
+          <p class="hint" style="margin-top:8px;">系统每天自动备份考勤数据。如遇数据异常，可从此处一键恢复。</p>
+          <button class="btn-small" onclick="openBackupModal()">查看备份 / 恢复</button>
+        </details>
       </div>
     </div>
 
@@ -439,6 +445,18 @@
       <button class="btn-menu" onclick="closeModal('modal-clubMenu'); exportSingleClub(currentClubId)">导出考勤报表</button>
       <button class="btn-menu danger" id="deleteClubMenuBtn" onclick="closeModal('modal-clubMenu'); deleteClub()">删除社团</button>
       <button class="btn-secondary" onclick="closeModal('modal-clubMenu')" style="margin-top:8px;">取消</button>
+    </div>
+  </div>
+
+  <div id="modal-backup" class="modal-overlay hidden" onclick="closeModal('modal-backup', event)">
+    <div class="modal">
+      <h3>数据备份与恢复</h3>
+      <p class="hint" id="backupDirHint"></p>
+      <div id="backupList" style="max-height:300px;overflow:auto;margin:10px 0;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-small" onclick="backupNow()">立即备份一次</button>
+        <button class="btn-secondary" onclick="closeModal('modal-backup')">关闭</button>
+      </div>
     </div>
   </div>
 
