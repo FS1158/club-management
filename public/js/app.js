@@ -1220,14 +1220,22 @@ function downloadTemplate(type) {
     ];
     fileName = '学生名单导入模板.xlsx';
   } else {
-    // 管理员模板：社团信息用键值对，学生列表用表格
-    // 格式：第1行 社团名称|xxx  第2行 指导教师|xxx  第3行 学号|姓名  后续为学生数据
+    // 管理员模板：多社团分区格式
+    // 每个社团区块：社团名称行 + 指导教师行 + 学号|姓名表头 + 学生数据
+    // 一个文件可包含多个社团，依次排列即可
     aoa = [
+      // === 第1个社团 ===
       ['社团名称', '篮球社'],
       ['指导教师', '张老师'],
       ['学号', '姓名'],
       ['2024001', '张三'],
-      ['2024002', '李四']
+      ['2024002', '李四'],
+      // === 第2个社团（直接接着写） ===
+      ['社团名称', '合唱团'],
+      ['指导教师', '王老师、李老师'],
+      ['学号', '姓名'],
+      ['2024003', '王五'],
+      ['2024004', '赵六']
     ];
     fileName = '社团与学生批量导入模板.xlsx';
   }
@@ -1314,13 +1322,12 @@ async function handleBulkFileUpload(event) {
 
     let items = [];
 
-    // ====== 格式检测：新模板（键值对 + 学生列表）======
-    // 新格式：第1列是标签（社团名称/指导教师/学号），前两行是键值对，第3行起是学生表头+数据
-    const kvFormat = detectKVFormat(rows);
+    // ====== 格式检测：新模板（键值对 + 学生列表，支持多社团分区）======
+    const isKVFormat = detectKVFormat(rows);
 
-    if (kvFormat) {
-      // 新格式：从键值对中提取社团名和老师
-      items = parseKVFormat(rows, kvFormat);
+    if (isKVFormat) {
+      // 新格式：支持一个文件内多个社团分区
+      items = parseKVMultiSection(rows);
     } else {
       // ====== 兼容旧格式：纯表格（每行一条记录）======
       items = parseTableFormat(rows);
@@ -1339,62 +1346,91 @@ async function handleBulkFileUpload(event) {
 }
 
 /**
- * 检测是否为"键值对+学生列表"新格式
- * 判断依据：第1列包含"社团名称"/"指导教师"等标签关键字
+ * 检测是否为"键值对+学生列表"新格式（支持多社团分区）
+ * 判断依据：第1列包含"社团名称"/"指导教师"/"学号"等标签关键字
  */
 function detectKVFormat(rows) {
   if (rows.length < 3) return null;
-  // 检查前几行的第1列是否为标签型内容
-  let clubNameRow = -1, teacherRow = -1, headerRow = -1;
-  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+  let hasClubLabel = false, hasIdLabel = false;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const col0 = String(rows[i][0] || '').trim();
-    if (col0 === '社团名称' || col0 === '社团') clubNameRow = i;
-    if (col0 === '指导教师' || col0 === '指导老师' || col0 === '教师' || col0 === '老师') teacherRow = i;
-    if (col0 === '学号') headerRow = i;
+    if (col0 === '社团名称' || col0 === '社团') hasClubLabel = true;
+    if (col0 === '学号') hasIdLabel = true;
   }
-  // 至少找到社团名行和学生表头行，才认为是新格式
-  if (clubNameRow >= 0 && headerRow >= 0 && headerRow > clubNameRow) {
-    return { clubNameRow, teacherRow, headerRow };
-  }
-  return null;
+  return (hasClubLabel && hasIdLabel) ? true : null; // 返回 true 表示检测到新格式
 }
 
 /**
- * 解析新格式：键值对头部 + 学生列表
- * 支持单个Excel文件包含一个社团的所有学生
+ * 解析新格式：支持多社团分区
+ * 每个"社团名称"行开始一个新区块，包含：
+ *   社团名称 | xxx
+ *   指导教师 | xxx（可选）
+ *   学号     | 姓名（表头）
+ *   学生数据行...
+ * 遇到下一个"社团名称"或文件末尾则当前区块结束
  */
-function parseKVFormat(rows, info) {
+function parseKVMultiSection(rows) {
   const items = [];
-  const clubName = String(rows[info.clubNameRow][1] || rows[info.clubNameRow][0] || '').trim();
-  const teacher = info.teacherRow >= 0
-    ? String(rows[info.teacherRow][1] || rows[info.teacherRow][0] || '').trim()
-    : '';
 
-  if (!clubName) return items;
-
-  // 从表头行下一行开始解析学生数据
-  // 表头行：第列为"学号"，找"姓名"列
-  const headerRow = rows[info.headerRow];
-  let idCol = -1, nameCol = -1;
-  headerRow.forEach((h, i) => {
-    const lower = (h || '').toLowerCase();
-    if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
-    if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
-  });
-  // 如果没找到姓名列，默认学号下一列就是姓名
-  if (idCol >= 0 && nameCol < 0) nameCol = idCol + 1;
-  // 如果都没找到，默认第0列学号、第1列姓名
-  if (idCol < 0) { idCol = 0; nameCol = 1; }
-
-  for (let i = info.headerRow + 1; i < rows.length; i++) {
-    const row = rows[i];
-    // 跳过空行
-    if (row.every(c => !String(c == null ? '' : c).trim())) continue;
-    const sid = String(row[idCol] == null ? '' : row[idCol]).trim();
-    const sname = nameCol >= 0 ? String(row[nameCol] == null ? '' : row[nameCol]).trim() : '';
-    if (!sid) continue; // 学号为空则跳过
-    items.push({ clubName, teacher, studentId: sid, studentName: sname });
+  // 第一步：找出所有"社团名称"行的位置（每个代表一个区块起点）
+  const sectionStarts = [];
+  for (let i = 0; i < rows.length; i++) {
+    const col0 = String(rows[i][0] || '').trim();
+    if (col0 === '社团名称' || col0 === '社团') {
+      sectionStarts.push(i);
+    }
   }
+
+  if (sectionStarts.length === 0) return items;
+
+  // 第二步：逐个解析每个区块
+  for (let sIdx = 0; sIdx < sectionStarts.length; sIdx++) {
+    const startRow = sectionStarts[sIdx];
+    const endRow = (sIdx + 1 < sectionStarts.length) ? sectionStarts[sIdx + 1] : rows.length;
+
+    // 提取社团名（社团名称行的第2列，即 B 列）
+    const clubName = String(rows[startRow][1] || '').trim();
+    if (!clubName) continue;
+
+    // 在区块内找指导教师和学号表头
+    let teacher = '';
+    let headerRowIdx = -1;
+
+    for (let i = startRow + 1; i < endRow; i++) {
+      const col0 = String(rows[i][0] || '').trim();
+      if (col0 === '指导教师' || col0 === '指导老师' || col0 === '教师' || col0 === '老师') {
+        teacher = String(rows[i][1] || '').trim();
+      }
+      if (col0 === '学号') {
+        headerRowIdx = i;
+        break; // 找到学号表头就停止搜索元数据
+      }
+    }
+
+    if (headerRowIdx < 0) continue; // 没有学生表头，跳过此区块
+
+    // 从表头行确定列位置
+    const headerRow = rows[headerRowIdx];
+    let idCol = -1, nameCol = -1;
+    headerRow.forEach((h, i) => {
+      const lower = (h || '').toLowerCase();
+      if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
+      if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
+    });
+    if (idCol >= 0 && nameCol < 0) nameCol = idCol + 1;
+    if (idCol < 0) { idCol = 0; nameCol = 1; }
+
+    // 第三步：解析该区块的学生数据（表头行之后到区块结束）
+    for (let i = headerRowIdx + 1; i < endRow; i++) {
+      const row = rows[i];
+      if (!row || row.every(c => !String(c == null ? '' : c).trim())) continue;
+      const sid = String(row[idCol] == null ? '' : row[idCol]).trim();
+      const sname = nameCol >= 0 ? String(row[nameCol] == null ? '' : row[nameCol]).trim() : '';
+      if (!sid) continue;
+      items.push({ clubName, teacher, studentId: sid, studentName: sname });
+    }
+  }
+
   return items;
 }
 
