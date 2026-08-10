@@ -280,6 +280,161 @@ select.login-input {
   background: rgba(255,255,255,0.1);
 }
 
+/* ===== 访客申请弹窗：加载圈 ===== */
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(92, 6, 50, 0.15);
+  border-top-color: var(--thu-purple);
+  border-radius: 50%;
+  animation: guest-spin 0.8s linear infinite;
+}
+@keyframes guest-spin { to { transform: rotate(360deg); } }
+
+/* ===== 访客页：权限横幅 & 概览栏 ===== */
+.guest-banner {
+  background: linear-gradient(135deg, #FFF7E6, #FFE7BA);
+  color: #8a5a00;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin: 12px;
+  border: 1px solid #FFD591;
+}
+.guest-overview-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+.guest-overview-bar .login-input { padding: 8px 10px; }
+#guestOverviewResult {
+  margin: 0 12px 8px;
+}
+.guest-overview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(0,0,0,0.06));
+}
+.guest-overview-table th, .guest-overview-table td {
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f0f0;
+}
+.guest-overview-table th {
+  background: rgba(92, 6, 50, 0.06);
+  color: var(--thu-purple);
+  font-weight: 600;
+}
+.guest-overview-table tr:last-child td { border-bottom: none; }
+.guest-overview-totals td { font-weight: 700; background: rgba(92, 6, 50, 0.03); }
+
+/* ===== 访客只读详情页 ===== */
+.guest-detail-meta {
+  padding: 12px 16px 0;
+  font-size: 14px;
+  color: var(--gray-600, #666);
+}
+.guest-readonly-tip {
+  margin: 10px 16px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #8a5a00;
+  background: #FFF7E6;
+  border: 1px solid #FFD591;
+  border-radius: 8px;
+}
+.guest-detail-body { padding: 4px 12px 24px; }
+.guest-date-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(0,0,0,0.06));
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.guest-date-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(92, 6, 50, 0.06);
+}
+.guest-date-title { font-weight: 600; color: var(--thu-purple); font-size: 14px; }
+.guest-date-count { font-size: 12px; color: var(--gray-500, #888); }
+.guest-stu-list { list-style: none; margin: 0; padding: 0; }
+.guest-stu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #f2f2f2;
+}
+.guest-stu-item:last-child { border-bottom: none; }
+.guest-stu-name { font-size: 14px; flex: 1; }
+.guest-stu-id { font-size: 12px; color: var(--gray-400, #aaa); }
+.status-tag {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tag-present { background: #E8F7EE; color: #1a9c54; }
+.tag-late { background: #FFF3E0; color: #e08a00; }
+.tag-absent { background: #FDECEC; color: #d93636; }
+.tag-unchecked { background: #F2F2F2; color: #999; }
+
+/* ===== 管理员导航角标 ===== */
+.nav-badge {
+  display: inline-block;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  background: #e54545;
+  color: #fff;
+  font-size: 11px;
+  border-radius: 9px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* ===== 访客审批列表项 ===== */
+.guest-req-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+.guest-req-info { flex: 1; min-width: 0; }
+.guest-req-note {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guest-req-time { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+.guest-req-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn-approve { background: var(--success); color: #fff; border: none; }
+.btn-approve:hover { filter: brightness(0.95); }
+.btn-reject { background: #fff; color: var(--danger); border: 1px solid var(--danger); }
+.btn-reject:hover { background: rgba(229,69,69,0.06); }
+
+
 /* ===== 顶部导航 ===== */
 .app-header {
   position: sticky;
