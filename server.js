@@ -174,9 +174,7 @@ function initData() {
           ],
           attendance: {}
         }
-      ],
-      guestRequests: [],
-      guestAccess: []
+      ]
     };
     saveData(sample);
   } else {
@@ -185,8 +183,6 @@ function initData() {
     if (!data.settings) {
       data.settings = { appName: '清华附中初中社团管理系统', adminPassword: 'admin123' };
     }
-    if (!Array.isArray(data.guestRequests)) data.guestRequests = [];
-    if (!Array.isArray(data.guestAccess)) data.guestAccess = [];
     saveData(data);
   }
 }
@@ -224,40 +220,6 @@ function canEditClub(session, clubId) {
   if (session.role === 'admin') return true;
   if (session.role === 'teacher' && session.clubId === clubId) return true;
   return false;
-}
-
-// ============ 访客临时通行（申请-审批制） ============
-const DAY_MS = 24 * 60 * 60 * 1000;
-// requestId -> { timer, resolve }（长轮询等待审批）
-const guestApprovers = new Map();
-
-// 清理过期访客令牌
-function cleanupGuestAccess() {
-  try {
-    const data = loadData();
-    const now = Date.now();
-    const before = data.guestAccess.length;
-    data.guestAccess = data.guestAccess.filter(a => a.expiresAt > now);
-    if (data.guestAccess.length !== before) saveData(data);
-  } catch (e) { /* ignore */ }
-}
-// 启动时清理一次，并每小时清理
-cleanupGuestAccess();
-setInterval(cleanupGuestAccess, 60 * 60 * 1000);
-
-// 访客令牌校验中间件：访客仅可查看，不可操作
-function guestAuth(req, res, next) {
-  let token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token && req.query.token) token = req.query.token;
-  if (!token) return res.status(401).json({ error: '访客令牌缺失' });
-  const data = loadData();
-  const entry = (data.guestAccess || []).find(a => a.token === token);
-  if (!entry) return res.status(401).json({ error: '访客令牌无效或已被撤销' });
-  if (entry.expiresAt <= Date.now()) {
-    return res.status(401).json({ error: '访客令牌已过期，请重新申请' });
-  }
-  req.guest = entry;
-  next();
 }
 
 // ============ SSE 实时推送 ============
@@ -373,171 +335,6 @@ app.get('/api/auth/check', authMiddleware('teacher'), (req, res) => {
 app.post('/api/logout', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (token) sessions.delete(token);
-  res.json({ success: true });
-});
-
-// ============ 访客：申请 / 审批 / 只读查看 ============
-
-// 访客提交查看申请（公开）
-app.post('/api/guest/request', (req, res) => {
-  const note = (req.body?.note || '').toString().trim().slice(0, 50);
-  const id = 'gr_' + crypto.randomBytes(6).toString('hex');
-  const data = loadData();
-  data.guestRequests.push({
-    id,
-    note,
-    requestedAt: Date.now(),
-    status: 'pending'
-  });
-  // 仅保留最近 50 条申请记录
-  if (data.guestRequests.length > 50) {
-    data.guestRequests = data.guestRequests.slice(-50);
-  }
-  saveData(data);
-  broadcast({ type: 'guest_request', id, note, requestedAt: Date.now() });
-  res.json({ requestId: id });
-});
-
-// 访客长轮询等待审批（公开）：最多等待 50s
-app.get('/api/guest/await-approval/:requestId', (req, res) => {
-  const { requestId } = req.params;
-  const data = loadData();
-  const reqEntry = (data.guestRequests || []).find(r => r.id === requestId);
-
-  if (!reqEntry) return res.json({ status: 'notfound' });
-  if (reqEntry.status === 'approved' && reqEntry.token) {
-    const access = (data.guestAccess || []).find(a => a.token === reqEntry.token);
-    if (access && access.expiresAt > Date.now()) {
-      return res.json({ status: 'approved', token: access.token, expiresAt: access.expiresAt });
-    }
-    return res.json({ status: 'expired' });
-  }
-  if (reqEntry.status === 'rejected') return res.json({ status: 'rejected' });
-
-  // 挂起等待审批
-  const timer = setTimeout(() => {
-    guestApprovers.delete(requestId);
-    res.json({ status: 'pending' });
-  }, 50000);
-  guestApprovers.set(requestId, { timer, resolve: (payload) => {
-    clearTimeout(timer);
-    guestApprovers.delete(requestId);
-    res.json(payload);
-  } });
-});
-
-// 访客只读：社团列表摘要
-app.get('/api/guest/clubs', guestAuth, (req, res) => {
-  const data = loadData();
-  const list = data.clubs.map(c => ({
-    id: c.id,
-    name: c.name,
-    teacher: c.teacher,
-    studentCount: (c.students || []).length,
-    attendanceDates: Object.keys(c.attendance || {}).sort().reverse(),
-    lessonCount: (c.files || []).filter(f => f.type === 'lesson').length,
-    photoCount: (c.files || []).filter(f => f.type === 'photo').length,
-    fileCount: (c.files || []).length
-  }));
-  res.json(list);
-});
-
-// 访客只读：社团详情（含学生与考勤，不可编辑）
-app.get('/api/guest/clubs/:id', guestAuth, (req, res) => {
-  const data = loadData();
-  const club = data.clubs.find(c => c.id === req.params.id);
-  if (!club) return res.status(404).json({ error: '社团不存在' });
-  res.json(club);
-});
-
-// 访客只读：某日全部社团考勤概览（"看所有的"）
-app.get('/api/guest/overview', guestAuth, (req, res) => {
-  const { date } = req.query;
-  const data = loadData();
-  if (!date) return res.status(400).json({ error: '缺少日期参数' });
-
-  const clubs = data.clubs.map(c => {
-    const records = (c.attendance || {})[date] || {};
-    const total = (c.students || []).length;
-    const present = Object.values(records).filter(s => s === 'present').length;
-    const late = Object.values(records).filter(s => s === 'late').length;
-    const absent = Object.values(records).filter(s => s === 'absent').length;
-    const unchecked = total - present - late - absent;
-    return {
-      id: c.id,
-      name: c.name,
-      teacher: c.teacher,
-      total, present, late, absent, unchecked,
-      hasRecord: Object.keys(records).length > 0
-    };
-  });
-
-  const totals = clubs.reduce((acc, c) => {
-    acc.total += c.total; acc.present += c.present; acc.late += c.late;
-    acc.absent += c.absent; acc.unchecked += c.unchecked;
-    return acc;
-  }, { total: 0, present: 0, late: 0, absent: 0, unchecked: 0 });
-
-  res.json({ date, clubs, totals });
-});
-
-// 管理员：列出访客申请
-app.get('/api/admin/guest-requests', authMiddleware('admin'), (req, res) => {
-  const data = loadData();
-  const requests = [...(data.guestRequests || [])].sort((a, b) => b.requestedAt - a.requestedAt);
-  const access = [...(data.guestAccess || [])]
-    .filter(a => a.expiresAt > Date.now())
-    .sort((a, b) => b.approvedAt - a.approvedAt)
-    .map(a => ({ token: a.token, note: a.note, approvedAt: a.approvedAt, expiresAt: a.expiresAt }));
-  res.json({ requests, access });
-});
-
-// 管理员：审批通过（生成 24h 访客令牌）
-app.post('/api/admin/guest/approve/:id', authMiddleware('admin'), (req, res) => {
-  const data = loadData();
-  const entry = (data.guestRequests || []).find(r => r.id === req.params.id);
-  if (!entry) return res.status(404).json({ error: '申请不存在' });
-  if (entry.status === 'approved') {
-    return res.json({ token: entry.token });
-  }
-  const token = 'gt_' + crypto.randomBytes(12).toString('hex');
-  const now = Date.now();
-  entry.status = 'approved';
-  entry.approvedAt = now;
-  entry.token = token;
-  data.guestAccess.push({ token, requestId: entry.id, note: entry.note, approvedAt: now, expiresAt: now + DAY_MS });
-  saveData(data);
-
-  // 唤醒长轮询中的访客
-  const pending = guestApprovers.get(entry.id);
-  if (pending) pending.resolve({ status: 'approved', token, expiresAt: now + DAY_MS });
-
-  broadcast({ type: 'guest_approved', id: entry.id });
-  res.json({ token, expiresAt: now + DAY_MS });
-});
-
-// 管理员：拒绝申请
-app.post('/api/admin/guest/reject/:id', authMiddleware('admin'), (req, res) => {
-  const data = loadData();
-  const entry = (data.guestRequests || []).find(r => r.id === req.params.id);
-  if (!entry) return res.status(404).json({ error: '申请不存在' });
-  entry.status = 'rejected';
-  entry.rejectedAt = Date.now();
-  saveData(data);
-  const pending = guestApprovers.get(entry.id);
-  if (pending) pending.resolve({ status: 'rejected' });
-  broadcast({ type: 'guest_rejected', id: entry.id });
-  res.json({ success: true });
-});
-
-// 管理员：撤销某个访客令牌
-app.post('/api/admin/guest/revoke', authMiddleware('admin'), (req, res) => {
-  const { token } = req.body || {};
-  if (!token) return res.status(400).json({ error: '缺少令牌' });
-  const data = loadData();
-  const before = data.guestAccess.length;
-  data.guestAccess = (data.guestAccess || []).filter(a => a.token !== token);
-  if (data.guestAccess.length !== before) saveData(data);
   res.json({ success: true });
 });
 
