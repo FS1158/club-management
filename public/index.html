@@ -462,7 +462,8 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- SheetJS 本地引入：不依赖外网 CDN，校园网/离线环境也能导入 Excel -->
+  <script src="js/xlsx.full.min.js" onerror="console.error('SheetJS 本地库加载失败：xlsx 导入将不可用，请检查 public/js/xlsx.full.min.js 是否存在')"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -1278,16 +1278,27 @@ async function handleBulkFileUpload(event) {
     let items = [];
     if (clubCol >= 0 && idCol >= 0 && nameCol >= 0) {
       // 有表头识别
+      let lastClub = '';
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
-        if (row[clubCol] && row[idCol] && row[nameCol]) {
-          items.push({
-            clubName: String(row[clubCol]).trim(),
-            teacher: teacherCol >= 0 ? String(row[teacherCol] || '').trim() : '',
-            studentId: String(row[idCol]).trim(),
-            studentName: String(row[nameCol]).trim()
-          });
-        }
+        // 跳过完全为空的行
+        if (row.every(c => !String(c == null ? '' : c).trim())) continue;
+        // 跳过重复出现的表头行（与表头内容完全一致）
+        const c0 = String(row[clubCol] == null ? '' : row[clubCol]).trim();
+        const i0 = String(row[idCol] == null ? '' : row[idCol]).trim();
+        const n0 = String(row[nameCol] == null ? '' : row[nameCol]).trim();
+        if (c0 === '社团名称' && i0 === '学号' && n0 === '姓名') continue;
+        const sid = i0, sname = n0;
+        if (!sid || !sname) continue;
+        let club = c0;
+        if (!club) club = lastClub;        // 社团名留空时向上沿用上一个
+        lastClub = club || lastClub;
+        items.push({
+          clubName: club,
+          teacher: teacherCol >= 0 ? String(row[teacherCol] == null ? '' : row[teacherCol]).trim() : '',
+          studentId: sid,
+          studentName: sname
+        });
       }
     } else {
       // 无表头或无法识别，按列顺序尝试：第1列社团，第2列老师，第3列学号，第4列姓名
@@ -1383,6 +1394,12 @@ async function handleStudentFileUpload(event) {
       // 有表头识别
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
+        // 跳过完全为空的行
+        if (row.every(c => !String(c == null ? '' : c).trim())) continue;
+        // 跳过重复出现的表头行
+        const i0 = String(row[idCol] == null ? '' : row[idCol]).trim();
+        const n0 = String(row[nameCol] == null ? '' : row[nameCol]).trim();
+        if (i0 === '学号' && n0 === '姓名') continue;
         if (row[idCol] && row[nameCol]) {
           students.push(`${String(row[idCol]).trim()} ${String(row[nameCol]).trim()}`);
         }
