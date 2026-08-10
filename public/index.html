@@ -106,6 +106,10 @@
         <div class="card">
           <h3>批量导入社团和学生</h3>
           <p class="hint">一次性导入所有社团和学生名单，系统自动创建社团</p>
+          <div class="template-bar">
+            <span class="template-bar-text">📥 不确定格式？先下载系统模板，按列填写后上传：</span>
+            <button class="btn-link" onclick="downloadTemplate('admin')">下载 Excel 模板</button>
+          </div>
           <div class="file-upload-area" onclick="document.getElementById('bulkFileInput').click()">
             <div class="upload-icon">📎</div>
             <p class="upload-text">点击上传文件</p>
@@ -240,6 +244,10 @@
         <!-- 编辑模式：导入学生名单 -->
         <div id="importSection" class="card hidden">
           <h3>导入学生名单</h3>
+          <div class="template-bar">
+            <span class="template-bar-text">📥 不确定格式？先下载系统模板，按列填写后上传：</span>
+            <button class="btn-link" onclick="downloadTemplate('teacher')">下载 Excel 模板</button>
+          </div>
           <div class="file-upload-area" onclick="document.getElementById('studentFileInput').click()">
             <div class="upload-icon">📎</div>
             <p class="upload-text">点击上传文件</p>
