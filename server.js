@@ -552,7 +552,7 @@ app.post('/api/clubs', authMiddleware('admin'), (req, res) => {
     id: 'club_' + crypto.randomBytes(6).toString('hex'),
     name,
     teacher: teacher || '',
-    pin: pin || '0000',
+    pin: pin || '1234',
     students: [],
     attendance: {}
   };
