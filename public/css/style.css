@@ -558,6 +558,38 @@ textarea:focus { border-color: var(--thu-purple); }
 
 .btn-secondary:active { background: var(--gray-200); }
 
+/* 下载模板提示条 */
+.template-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--thu-purple-soft, #f5ecf1);
+  border: 1px solid var(--thu-purple-light, #e3d2dd);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.template-bar-text {
+  font-size: 13px;
+  color: var(--gray-600);
+  line-height: 1.4;
+}
+.btn-link {
+  background: transparent;
+  border: none;
+  color: var(--thu-purple, #5C0632);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.btn-link:hover { background: rgba(92, 6, 50, 0.08); }
+.btn-link:active { transform: scale(0.97); }
+
 .btn-small {
   background: var(--thu-purple-lightest);
   color: var(--thu-purple);
