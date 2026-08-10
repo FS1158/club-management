@@ -309,6 +309,9 @@ app.post('/api/clubs/:id/students', authMiddleware('teacher'), (req, res) => {
   if (!club) return res.status(404).json({ error: '社团不存在' });
 
   const { students } = req.body;
+  if (students === undefined || students === null) {
+    return res.status(400).json({ error: '缺少 students 字段，未做任何修改' });
+  }
   let parsed = [];
   if (typeof students === 'string') {
     const lines = students.trim().split(/\n/).filter(l => l.trim());
@@ -322,6 +325,8 @@ app.post('/api/clubs/:id/students', authMiddleware('teacher'), (req, res) => {
     }
   } else if (Array.isArray(students)) {
     parsed = students;
+  } else {
+    return res.status(400).json({ error: 'students 格式不正确，未做任何修改' });
   }
 
   club.students = parsed;
