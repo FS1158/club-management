@@ -1204,6 +1204,45 @@ async function exportAllClubs() {
   }
 }
 
+// ============ 下载导入模板（Excel） ============
+// type: 'admin' -> 社团名称/指导教师/学号/姓名；'teacher' -> 学号/姓名
+function downloadTemplate(type) {
+  if (typeof XLSX === 'undefined') {
+    showToast('模板组件未加载，请刷新页面后重试');
+    return;
+  }
+  let headers, sampleRows, fileName;
+  if (type === 'teacher') {
+    headers = ['学号', '姓名'];
+    sampleRows = [
+      ['2024001', '张三'],
+      ['2024002', '李四']
+    ];
+    fileName = '学生名单导入模板.xlsx';
+  } else {
+    headers = ['社团名称', '指导教师', '学号', '姓名'];
+    // 指导教师单独一列：可填 1 位（如"张老师"）或 2 位（如"张老师、李老师"），与学生在不同列
+    sampleRows = [
+      ['篮球社', '张老师', '2024001', '张三'],
+      ['篮球社', '张老师', '2024002', '李四'],
+      ['合唱团', '张老师、李老师', '2024003', '王五'],
+      ['合唱团', '张老师、李老师', '2024004', '赵六']
+    ];
+    fileName = '社团与学生批量导入模板.xlsx';
+  }
+  const aoa = [headers, ...sampleRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  // 列宽自适应
+  const colWidths = headers.map((h, i) => ({
+    wch: Math.max(String(h).length, ...sampleRows.map(r => String(r[i] || '').length), 6) + 2
+  }));
+  ws['!cols'] = colWidths;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '导入模板');
+  XLSX.writeFile(wb, fileName);
+  showToast('模板已下载，请按列填写后上传');
+}
+
 // ============ 批量导入（管理员） ============
 
 async function bulkImport() {
