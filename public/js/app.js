@@ -1211,36 +1211,46 @@ function downloadTemplate(type) {
     showToast('模板组件未加载，请刷新页面后重试');
     return;
   }
-  let headers, sampleRows, fileName;
+  let aoa, fileName;
   if (type === 'teacher') {
-    headers = ['学号', '姓名'];
-    sampleRows = [
+    aoa = [
+      ['学号', '姓名'],
       ['2024001', '张三'],
       ['2024002', '李四']
     ];
     fileName = '学生名单导入模板.xlsx';
   } else {
-    headers = ['社团名称', '指导教师', '学号', '姓名'];
-    // 指导教师单独一列：可填 1 位（如"张老师"）或 2 位（如"张老师、李老师"），与学生在不同列
-    sampleRows = [
-      ['篮球社', '张老师', '2024001', '张三'],
-      ['篮球社', '张老师', '2024002', '李四'],
-      ['合唱团', '张老师、李老师', '2024003', '王五'],
-      ['合唱团', '张老师、李老师', '2024004', '赵六']
+    // 管理员模板：社团信息用键值对，学生列表用表格
+    // 格式：第1行 社团名称|xxx  第2行 指导教师|xxx  第3行 学号|姓名  后续为学生数据
+    aoa = [
+      ['社团名称', '篮球社'],
+      ['指导教师', '张老师'],
+      ['学号', '姓名'],
+      ['2024001', '张三'],
+      ['2024002', '李四']
     ];
     fileName = '社团与学生批量导入模板.xlsx';
   }
-  const aoa = [headers, ...sampleRows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   // 列宽自适应
-  const colWidths = headers.map((h, i) => ({
-    wch: Math.max(String(h).length, ...sampleRows.map(r => String(r[i] || '').length), 6) + 2
-  }));
+  const maxCol = Math.max(...aoa.map(r => r.length));
+  const colWidths = [];
+  for (let c = 0; c < maxCol; c++) {
+    const maxLen = Math.max(...aoa.map(r => String(r[c] || '').length), 6);
+    colWidths.push({ wch: maxLen + 2 });
+  }
   ws['!cols'] = colWidths;
+  // 给前两行（社团名、指导教师）加粗显示
+  if (type !== 'teacher') {
+    ws['A1'].s = { font: { bold: true } };
+    ws['A2'].s = { font: { bold: true } };
+    ws['A3'].s = { font: { bold: true } };
+    ws['B3'].s = { font: { bold: true } };
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '导入模板');
   XLSX.writeFile(wb, fileName);
-  showToast('模板已下载，请按列填写后上传');
+  showToast('模板已下载，请按示例填写后上传');
 }
 
 // ============ 批量导入（管理员） ============
@@ -1302,55 +1312,18 @@ async function handleBulkFileUpload(event) {
     const rows = await parseFile(file);
     if (rows.length === 0) { showToast('文件中未识别到有效数据'); return; }
 
-    // 智能识别列：查找包含"社团"的列、包含"学号"的列、包含"姓名"的列、包含"老师/指导"的列
-    const headers = rows[0] || [];
-    let clubCol = -1, teacherCol = -1, idCol = -1, nameCol = -1;
-
-    headers.forEach((h, i) => {
-      const lower = (h || '').toLowerCase();
-      if (lower.includes('社团') || lower.includes('club') || lower.includes('名称')) clubCol = i;
-      if (lower.includes('老师') || lower.includes('教师') || lower.includes('指导') || lower.includes('teacher')) teacherCol = i;
-      if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
-      if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
-    });
-
     let items = [];
-    if (clubCol >= 0 && idCol >= 0 && nameCol >= 0) {
-      // 有表头识别
-      let lastClub = '';
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        // 跳过完全为空的行
-        if (row.every(c => !String(c == null ? '' : c).trim())) continue;
-        // 跳过重复出现的表头行（与表头内容完全一致）
-        const c0 = String(row[clubCol] == null ? '' : row[clubCol]).trim();
-        const i0 = String(row[idCol] == null ? '' : row[idCol]).trim();
-        const n0 = String(row[nameCol] == null ? '' : row[nameCol]).trim();
-        if (c0 === '社团名称' && i0 === '学号' && n0 === '姓名') continue;
-        const sid = i0, sname = n0;
-        if (!sid || !sname) continue;
-        let club = c0;
-        if (!club) club = lastClub;        // 社团名留空时向上沿用上一个
-        lastClub = club || lastClub;
-        items.push({
-          clubName: club,
-          teacher: teacherCol >= 0 ? String(row[teacherCol] == null ? '' : row[teacherCol]).trim() : '',
-          studentId: sid,
-          studentName: sname
-        });
-      }
+
+    // ====== 格式检测：新模板（键值对 + 学生列表）======
+    // 新格式：第1列是标签（社团名称/指导教师/学号），前两行是键值对，第3行起是学生表头+数据
+    const kvFormat = detectKVFormat(rows);
+
+    if (kvFormat) {
+      // 新格式：从键值对中提取社团名和老师
+      items = parseKVFormat(rows, kvFormat);
     } else {
-      // 无表头或无法识别，按列顺序尝试：第1列社团，第2列老师，第3列学号，第4列姓名
-      // 或3列：社团，学号，姓名
-      const startIdx = (headers.some(h => /社团|学号|姓名|老师|teacher|name|id|club/i.test(h || ''))) ? 1 : 0;
-      for (let i = startIdx; i < rows.length; i++) {
-        const row = rows[i];
-        if (row.length >= 4) {
-          items.push({ clubName: String(row[0]).trim(), teacher: String(row[1]).trim(), studentId: String(row[2]).trim(), studentName: String(row[3]).trim() });
-        } else if (row.length === 3) {
-          items.push({ clubName: String(row[0]).trim(), teacher: '', studentId: String(row[1]).trim(), studentName: String(row[2]).trim() });
-        }
-      }
+      // ====== 兼容旧格式：纯表格（每行一条记录）======
+      items = parseTableFormat(rows);
     }
 
     if (items.length === 0) { showToast('未识别到有效数据，请检查文件格式'); return; }
@@ -1358,11 +1331,119 @@ async function handleBulkFileUpload(event) {
     // 填入文本框预览
     const previewText = items.map(it => `${it.clubName},${it.teacher || ''},${it.studentId},${it.studentName}`).join('\n');
     document.getElementById('bulkImportInput').value = previewText;
-    showToast(`已解析 ${items.length} 条记录，请检查后点击"一键导入"`, 3000);
+    showToast(`已解析 ${items.length} 条学生记录，请检查后点击"一键导入"`, 3000);
   } catch (e) {
     showToast('文件解析失败：' + e.message);
   }
   event.target.value = '';
+}
+
+/**
+ * 检测是否为"键值对+学生列表"新格式
+ * 判断依据：第1列包含"社团名称"/"指导教师"等标签关键字
+ */
+function detectKVFormat(rows) {
+  if (rows.length < 3) return null;
+  // 检查前几行的第1列是否为标签型内容
+  let clubNameRow = -1, teacherRow = -1, headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const col0 = String(rows[i][0] || '').trim();
+    if (col0 === '社团名称' || col0 === '社团') clubNameRow = i;
+    if (col0 === '指导教师' || col0 === '指导老师' || col0 === '教师' || col0 === '老师') teacherRow = i;
+    if (col0 === '学号') headerRow = i;
+  }
+  // 至少找到社团名行和学生表头行，才认为是新格式
+  if (clubNameRow >= 0 && headerRow >= 0 && headerRow > clubNameRow) {
+    return { clubNameRow, teacherRow, headerRow };
+  }
+  return null;
+}
+
+/**
+ * 解析新格式：键值对头部 + 学生列表
+ * 支持单个Excel文件包含一个社团的所有学生
+ */
+function parseKVFormat(rows, info) {
+  const items = [];
+  const clubName = String(rows[info.clubNameRow][1] || rows[info.clubNameRow][0] || '').trim();
+  const teacher = info.teacherRow >= 0
+    ? String(rows[info.teacherRow][1] || rows[info.teacherRow][0] || '').trim()
+    : '';
+
+  if (!clubName) return items;
+
+  // 从表头行下一行开始解析学生数据
+  // 表头行：第列为"学号"，找"姓名"列
+  const headerRow = rows[info.headerRow];
+  let idCol = -1, nameCol = -1;
+  headerRow.forEach((h, i) => {
+    const lower = (h || '').toLowerCase();
+    if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
+    if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
+  });
+  // 如果没找到姓名列，默认学号下一列就是姓名
+  if (idCol >= 0 && nameCol < 0) nameCol = idCol + 1;
+  // 如果都没找到，默认第0列学号、第1列姓名
+  if (idCol < 0) { idCol = 0; nameCol = 1; }
+
+  for (let i = info.headerRow + 1; i < rows.length; i++) {
+    const row = rows[i];
+    // 跳过空行
+    if (row.every(c => !String(c == null ? '' : c).trim())) continue;
+    const sid = String(row[idCol] == null ? '' : row[idCol]).trim();
+    const sname = nameCol >= 0 ? String(row[nameCol] == null ? '' : row[nameCol]).trim() : '';
+    if (!sid) continue; // 学号为空则跳过
+    items.push({ clubName, teacher, studentId: sid, studentName: sname });
+  }
+  return items;
+}
+
+/**
+ * 解析旧格式：纯表格（每行一条：社团名,老师,学号,姓名）
+ */
+function parseTableFormat(rows) {
+  const items = [];
+  const headers = rows[0] || [];
+  let clubCol = -1, teacherCol = -1, idCol = -1, nameCol = -1;
+
+  headers.forEach((h, i) => {
+    const lower = (h || '').toLowerCase();
+    if (lower.includes('社团') || lower.includes('club') || lower.includes('名称')) clubCol = i;
+    if (lower.includes('老师') || lower.includes('教师') || lower.includes('指导') || lower.includes('teacher')) teacherCol = i;
+    if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
+    if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
+  });
+
+  if (clubCol >= 0 && idCol >= 0 && nameCol >= 0) {
+    let lastClub = '', lastTeacher = '';
+    const startIdx = 1; // 有表头则从第2行开始
+    for (let i = startIdx; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.every(c => !String(c == null ? '' : c).trim())) continue;
+      // 跳过重复表头
+      const c0 = String(row[clubCol] == null ? '' : row[clubCol]).trim();
+      const i0 = String(row[idCol] == null ? '' : row[idCol]).trim();
+      const n0 = String(row[nameCol] == null ? '' : row[nameCol]).trim();
+      if (c0 === '社团名称' && i0 === '学号' && n0 === '姓名') continue;
+      if (!i0) continue;
+      let club = c0; if (!club) club = lastClub;
+      let tch = teacherCol >= 0 ? String(row[teacherCol] == null ? '' : row[teacherCol]).trim() : ''; if (!tch) tch = lastTeacher;
+      lastClub = club || lastClub; lastTeacher = tch || lastTeacher;
+      items.push({ clubName: club, teacher: tch, studentId: i0, studentName: n0 });
+    }
+  } else {
+    // 无表头，按列顺序
+    const startIdx = (headers.some(h => /社团|学号|姓名|老师|teacher|name|id|club/i.test(h || ''))) ? 1 : 0;
+    for (let i = startIdx; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length >= 4) {
+        items.push({ clubName: String(row[0]).trim(), teacher: String(row[1]).trim(), studentId: String(row[2]).trim(), studentName: String(row[3]).trim() });
+      } else if (row.length === 3) {
+        items.push({ clubName: String(row[0]).trim(), teacher: '', studentId: String(row[1]).trim(), studentName: String(row[2]).trim() });
+      }
+    }
+  }
+  return items;
 }
 
 // ============ 文件解析工具 ============
