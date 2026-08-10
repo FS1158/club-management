@@ -79,8 +79,13 @@
       </div>
 
       <div id="adminTab-dashboard" class="admin-tab active">
-        <div id="dashboardStats"></div>
-        <div id="dashboardDateStats"></div>
+      <div id="dashboardStats"></div>
+      <div id="guestApprovalBanner" class="guest-approval-banner hidden">
+        <span class="gab-icon">🔔</span>
+        <span class="gab-text">有 <b id="guestApprovalCount">0</b> 条访客查看申请待审批</span>
+        <button class="btn-small btn-approve" onclick="switchAdminTab('guest', this)">前往审批</button>
+      </div>
+      <div id="dashboardDateStats"></div>
         <div class="card">
           <div class="attendance-header">
             <h3 style="margin-bottom:0;">各社团概览</h3>
@@ -506,16 +511,39 @@
   <!-- ========== 访客申请查看弹窗 ========== -->
   <div id="modal-guest-request" class="modal-overlay hidden" onclick="closeModal('modal-guest-request', event)">
     <div class="modal" style="max-width:360px;">
-      <h3>申请访客查看</h3>
-      <p class="hint">提交后需管理员在后台审批通过，您即可在 <b>24 小时内</b> 临时查看全部社团考勤（仅查看，不可编辑/操作）。</p>
-      <input id="guestRequestNote" type="text" class="login-input" placeholder="请填写身份或事由，如：家长参观 / 教务处检查" maxlength="50">
-      <button class="btn-login" id="guestRequestSubmitBtn" onclick="submitGuestRequest()">提交申请</button>
-      <div id="guestRequestWaiting" class="hidden" style="text-align:center;padding:14px 0 4px;">
-        <div class="spinner" style="margin:0 auto 10px;"></div>
-        <p style="font-size:14px;color:var(--gray-500);">已提交，正在等待管理员审批…</p>
-        <p style="font-size:12px;color:var(--gray-400);margin-top:4px;">请勿关闭此窗口</p>
+      <h3 id="guestModalTitle">申请访客查看</h3>
+
+      <!-- 提交表单 -->
+      <div id="guestRequestForm">
+        <p class="hint">填写身份或事由后提交申请。提交后您可<b>随时关闭本页面</b>，无需等待。管理员审批通过后（令牌最长 24 小时有效），再次点击下方「以访客身份查看考勤」即可进入，查看全部社团考勤（仅查看，不可操作）。</p>
+        <input id="guestRequestNote" type="text" class="login-input" placeholder="请填写身份或事由，如：家长参观 / 教务处检查" maxlength="50">
+        <button class="btn-login" id="guestRequestSubmitBtn" onclick="submitGuestRequest()">提交申请</button>
+        <button class="btn-link" id="guestRequestCancelBtn" onclick="cancelGuestRequest()">取消</button>
       </div>
-      <button class="btn-link" id="guestRequestCancelBtn" onclick="cancelGuestRequest()">取消</button>
+
+      <!-- 审核中 -->
+      <div id="guestRequestPending" class="hidden" style="text-align:center;padding:8px 0;">
+        <div style="font-size:36px;margin-bottom:4px;">⏳</div>
+        <p style="font-size:15px;color:var(--gray-700);font-weight:600;">申请审核中</p>
+        <p style="font-size:13px;color:var(--gray-500);margin-top:8px;line-height:1.6;">管理员尚未审批。您可以先关闭本页面，稍后再次点击「以访客身份查看考勤」查看结果。</p>
+        <button class="btn-link" onclick="cancelGuestRequest()">关闭</button>
+      </div>
+
+      <!-- 提交成功 -->
+      <div id="guestRequestSuccess" class="hidden" style="text-align:center;padding:8px 0;">
+        <div style="font-size:36px;margin-bottom:4px;">✅</div>
+        <p style="font-size:15px;color:var(--success);font-weight:600;">申请已提交！</p>
+        <p style="font-size:13px;color:var(--gray-500);margin-top:8px;line-height:1.6;">您可以随时关闭本页面。管理员审批通过后，再次点击「以访客身份查看考勤」即可进入查看（24 小时内有效）。</p>
+        <button class="btn-login" onclick="cancelGuestRequest()">我知道了</button>
+      </div>
+
+      <!-- 被拒绝 -->
+      <div id="guestRequestRejected" class="hidden" style="text-align:center;padding:8px 0;">
+        <div style="font-size:36px;margin-bottom:4px;">⛔</div>
+        <p style="font-size:15px;color:var(--danger);font-weight:600;">申请未通过</p>
+        <p style="font-size:13px;color:var(--gray-500);margin-top:8px;line-height:1.6;">管理员拒绝了本次申请。如需查看，请重新提交。</p>
+        <button class="btn-login" id="guestRequestResubmitBtn" onclick="showGuestRequestForm()">重新申请</button>
+      </div>
     </div>
   </div>
 
