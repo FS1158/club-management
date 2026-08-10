@@ -156,12 +156,62 @@ function guestHeaders() {
   return guestToken ? { 'Authorization': 'Bearer ' + guestToken, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 }
 
-function openGuestRequestModal() {
+async function openGuestRequestModal() {
+  // 若本地已存有申请记录，先查询其最新状态（已通过则直接进入，无需等待）
+  const storedId = localStorage.getItem('guestRequestId');
+  if (storedId) {
+    await checkGuestRequestStatus(storedId);
+    return;
+  }
+  showGuestRequestForm();
+}
+
+function showGuestRequestForm() {
+  document.getElementById('guestModalTitle').textContent = '申请访客查看';
+  document.getElementById('guestRequestForm').classList.remove('hidden');
+  document.getElementById('guestRequestPending').classList.add('hidden');
+  document.getElementById('guestRequestSuccess').classList.add('hidden');
+  document.getElementById('guestRequestRejected').classList.add('hidden');
   document.getElementById('guestRequestNote').value = '';
-  document.getElementById('guestRequestSubmitBtn').style.display = '';
-  document.getElementById('guestRequestCancelBtn').style.display = '';
-  document.getElementById('guestRequestWaiting').classList.add('hidden');
   document.getElementById('modal-guest-request').classList.remove('hidden');
+}
+
+// 查询某条申请的状态：已通过 → 直接进入；审核中/被拒 → 对应提示；失效 → 回到表单
+async function checkGuestRequestStatus(requestId) {
+  try {
+    const res = await fetch(API + '/api/guest/await-approval/' + requestId);
+    const data = await res.json();
+    if (data.status === 'approved' && data.token) {
+      enterGuestView(data.token, data.expiresAt);
+      return;
+    }
+    if (data.status === 'pending') {
+      document.getElementById('guestModalTitle').textContent = '申请状态';
+      document.getElementById('guestRequestForm').classList.add('hidden');
+      document.getElementById('guestRequestPending').classList.remove('hidden');
+      document.getElementById('guestRequestSuccess').classList.add('hidden');
+      document.getElementById('guestRequestRejected').classList.add('hidden');
+      document.getElementById('modal-guest-request').classList.remove('hidden');
+      return;
+    }
+    if (data.status === 'rejected') {
+      // 已拒绝：清理记录，允许重新申请
+      localStorage.removeItem('guestRequestId');
+      document.getElementById('guestModalTitle').textContent = '申请状态';
+      document.getElementById('guestRequestForm').classList.add('hidden');
+      document.getElementById('guestRequestPending').classList.add('hidden');
+      document.getElementById('guestRequestSuccess').classList.add('hidden');
+      document.getElementById('guestRequestRejected').classList.remove('hidden');
+      document.getElementById('modal-guest-request').classList.remove('hidden');
+      return;
+    }
+    // notfound / expired：清理并展示表单
+    localStorage.removeItem('guestRequestId');
+    showGuestRequestForm();
+  } catch (e) {
+    localStorage.removeItem('guestRequestId');
+    showGuestRequestForm();
+  }
 }
 
 async function submitGuestRequest() {
@@ -174,50 +224,22 @@ async function submitGuestRequest() {
     });
     const data = await res.json();
     if (!data.requestId) { showToast('申请提交失败'); return; }
+    // 保存申请 ID，便于稍后回来查询结果（无需停留在页面等待）
+    localStorage.setItem('guestRequestId', data.requestId);
     guestRequestId = data.requestId;
-    document.getElementById('guestRequestSubmitBtn').style.display = 'none';
-    document.getElementById('guestRequestCancelBtn').style.display = 'none';
-    document.getElementById('guestRequestWaiting').classList.remove('hidden');
-    awaitGuestApprovalLoop();
+    // 显示成功提示：访客可随时关闭/离开界面
+    document.getElementById('guestModalTitle').textContent = '提交成功';
+    document.getElementById('guestRequestForm').classList.add('hidden');
+    document.getElementById('guestRequestPending').classList.add('hidden');
+    document.getElementById('guestRequestSuccess').classList.remove('hidden');
+    document.getElementById('guestRequestRejected').classList.add('hidden');
   } catch (e) {
     showToast('网络错误，申请失败');
   }
 }
 
 function cancelGuestRequest() {
-  if (guestPollTimer) { clearTimeout(guestPollTimer); guestPollTimer = null; }
   closeModal('modal-guest-request');
-}
-
-async function awaitGuestApprovalLoop() {
-  if (!guestRequestId) return;
-  try {
-    const res = await fetch(API + '/api/guest/await-approval/' + guestRequestId);
-    const data = await res.json();
-    if (data.status === 'approved' && data.token) {
-      enterGuestView(data.token, data.expiresAt);
-      return;
-    }
-    if (data.status === 'rejected') {
-      showToast('申请已被管理员拒绝');
-      document.getElementById('guestRequestSubmitBtn').style.display = '';
-      document.getElementById('guestRequestCancelBtn').style.display = '';
-      document.getElementById('guestRequestWaiting').classList.add('hidden');
-      return;
-    }
-    if (data.status === 'expired' || data.status === 'notfound') {
-      showToast('申请已失效，请重新提交');
-      document.getElementById('guestRequestSubmitBtn').style.display = '';
-      document.getElementById('guestRequestCancelBtn').style.display = '';
-      document.getElementById('guestRequestWaiting').classList.add('hidden');
-      return;
-    }
-    // pending：继续轮询
-    guestPollTimer = setTimeout(awaitGuestApprovalLoop, 1500);
-  } catch (e) {
-    // 网络出错稍后重试
-    guestPollTimer = setTimeout(awaitGuestApprovalLoop, 3000);
-  }
 }
 
 function enterGuestView(token, expiresAt) {
@@ -269,6 +291,17 @@ async function pollGuestRequests() {
       if (pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
       else badge.classList.add('hidden');
     }
+    // 仪表盘顶部常驻提醒横幅：即使错过 toast 也能一眼看到
+    const banner = document.getElementById('guestApprovalBanner');
+    if (banner) {
+      if (pending > 0) {
+        const cnt = document.getElementById('guestApprovalCount');
+        if (cnt) cnt.textContent = pending;
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
     const pendingEl = document.getElementById('guestPendingList');
     const activeEl = document.getElementById('guestActiveList');
     if (pendingEl && activeEl) {
@@ -290,9 +323,9 @@ function enterAdmin() {
   loadAdminClubs();
   loadExportClubs();
   navigateTo('admin-dashboard');
-  // 启动轮询兜底：每 20 秒检查访客审批申请，保证管理员一定能收到
+  // 启动轮询兜底：每 10 秒检查访客审批申请，保证管理员一定能收到通知
   if (adminGuestPollTimer) clearInterval(adminGuestPollTimer);
-  adminGuestPollTimer = setInterval(pollGuestRequests, 20000);
+  adminGuestPollTimer = setInterval(pollGuestRequests, 10000);
   pollGuestRequests();
 }
 
