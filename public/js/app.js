@@ -193,7 +193,7 @@ function redirectToFeishuAuth(appId) {
     + '?app_id=' + encodeURIComponent(appId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
     + '&state=' + encodeURIComponent(state)
-    + '&scope=' + encodeURIComponent('openid profile email mobile');
+    + '&scope=' + encodeURIComponent('openid profile email');
   window.location.href = authUrl;
 }
 
