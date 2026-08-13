@@ -884,7 +884,7 @@ app.get('/api/admin/attendance-detail', authMiddleware('admin'), (req, res) => {
 // 管理员：批量导入社团和学生
 app.post('/api/admin/bulk-import', authMiddleware('admin'), (req, res) => {
   const data = loadData();
-  const { items } = req.body; // [{ clubName, teacher, studentId, studentName }]
+  const { items } = req.body; // [{ clubName, teacher, feishuMobile, studentId, studentName }]
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: '数据为空' });
@@ -904,6 +904,7 @@ app.post('/api/admin/bulk-import', authMiddleware('admin'), (req, res) => {
         id: 'club_' + crypto.randomBytes(6).toString('hex'),
         name: item.clubName,
         teacher: item.teacher || '',
+        feishuMobile: item.feishuMobile || '',
         pin: '1234',
         students: [],
         attendance: {}
@@ -913,6 +914,10 @@ app.post('/api/admin/bulk-import', authMiddleware('admin'), (req, res) => {
     } else {
       updatedClubs++;
       if (item.teacher && !club.teacher) club.teacher = item.teacher;
+      // 飞书免登：老师手机号（仅当原社团未设置时才填充，避免覆盖已有的）
+      if (item.feishuMobile && !club.feishuMobile) {
+        club.feishuMobile = String(item.feishuMobile).trim();
+      }
     }
 
     // 添加学生（避免重复）

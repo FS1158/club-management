@@ -1363,18 +1363,20 @@ function downloadTemplate(type) {
     fileName = '学生名单导入模板.xlsx';
   } else {
     // 管理员模板：多社团分区格式
-    // 每个社团区块：社团名称行 + 指导教师行 + 学号|姓名表头 + 学生数据
+    // 每个社团区块：社团名称行 + 指导教师行 + 老师手机号行 + 学号|姓名表头 + 学生数据
     // 一个文件可包含多个社团，依次排列即可
     aoa = [
       // === 第1个社团 ===
       ['社团名称', '篮球社'],
       ['指导教师', '张老师'],
+      ['老师手机号', '13800138000'],
       ['学号', '姓名'],
       ['2024001', '张三'],
       ['2024002', '李四'],
       // === 第2个社团（直接接着写） ===
       ['社团名称', '合唱团'],
       ['指导教师', '王老师、李老师'],
+      ['老师手机号', '13900139000'],
       ['学号', '姓名'],
       ['2024003', '王五'],
       ['2024004', '赵六']
@@ -1443,13 +1445,17 @@ function parseBulkText(text) {
   const lines = text.trim().split(/\n/).filter(l => l.trim());
   const items = [];
   for (const line of lines) {
-    const parts = line.trim().split(/[,，\t\s]+/).filter(p => p);
-    // 支持格式：社团名称,指导老师,学号,姓名（4列）
-    // 或：社团名称,学号,姓名（3列）
-    if (parts.length >= 4) {
-      items.push({ clubName: parts[0], teacher: parts[1], studentId: parts[2], studentName: parts.slice(3).join('') });
+    const parts = line.trim().split(/[,，\t]+/).filter(p => p.trim());
+    // 支持格式：
+    // 5列：社团名称,指导老师,老师手机号,学号,姓名
+    // 4列：社团名称,指导老师,学号,姓名
+    // 3列：社团名称,学号,姓名
+    if (parts.length >= 5) {
+      items.push({ clubName: parts[0].trim(), teacher: parts[1].trim(), feishuMobile: parts[2].trim(), studentId: parts[3].trim(), studentName: parts.slice(4).join('').trim() });
+    } else if (parts.length === 4) {
+      items.push({ clubName: parts[0].trim(), teacher: parts[1].trim(), feishuMobile: '', studentId: parts[2].trim(), studentName: parts[3].trim() });
     } else if (parts.length === 3) {
-      items.push({ clubName: parts[0], teacher: '', studentId: parts[1], studentName: parts[2] });
+      items.push({ clubName: parts[0].trim(), teacher: '', feishuMobile: '', studentId: parts[1].trim(), studentName: parts[2].trim() });
     }
   }
   return items;
@@ -1478,7 +1484,7 @@ async function handleBulkFileUpload(event) {
     if (items.length === 0) { showToast('未识别到有效数据，请检查文件格式'); return; }
 
     // 填入文本框预览
-    const previewText = items.map(it => `${it.clubName},${it.teacher || ''},${it.studentId},${it.studentName}`).join('\n');
+    const previewText = items.map(it => `${it.clubName},${it.teacher || ''},${it.feishuMobile || ''},${it.studentId},${it.studentName}`).join('\n');
     document.getElementById('bulkImportInput').value = previewText;
     showToast(`已解析 ${items.length} 条学生记录，请检查后点击"一键导入"`, 3000);
   } catch (e) {
@@ -1534,14 +1540,18 @@ function parseKVMultiSection(rows) {
     const clubName = String(rows[startRow][1] || '').trim();
     if (!clubName) continue;
 
-    // 在区块内找指导教师和学号表头
+    // 在区块内找指导教师、老师手机号和学号表头
     let teacher = '';
+    let feishuMobile = '';
     let headerRowIdx = -1;
 
     for (let i = startRow + 1; i < endRow; i++) {
       const col0 = String(rows[i][0] || '').trim();
       if (col0 === '指导教师' || col0 === '指导老师' || col0 === '教师' || col0 === '老师') {
         teacher = String(rows[i][1] || '').trim();
+      }
+      if (col0 === '老师手机号' || col0 === '手机号' || col0 === '飞书手机号' || col0 === '教师手机号') {
+        feishuMobile = String(rows[i][1] || '').trim();
       }
       if (col0 === '学号') {
         headerRowIdx = i;
@@ -1569,7 +1579,7 @@ function parseKVMultiSection(rows) {
       const sid = String(row[idCol] == null ? '' : row[idCol]).trim();
       const sname = nameCol >= 0 ? String(row[nameCol] == null ? '' : row[nameCol]).trim() : '';
       if (!sid) continue;
-      items.push({ clubName, teacher, studentId: sid, studentName: sname });
+      items.push({ clubName, teacher, feishuMobile, studentId: sid, studentName: sname });
     }
   }
 
@@ -1584,10 +1594,12 @@ function parseTableFormat(rows) {
   const headers = rows[0] || [];
   let clubCol = -1, teacherCol = -1, idCol = -1, nameCol = -1;
 
+  let mobileCol = -1;
   headers.forEach((h, i) => {
     const lower = (h || '').toLowerCase();
     if (lower.includes('社团') || lower.includes('club') || lower.includes('名称')) clubCol = i;
     if (lower.includes('老师') || lower.includes('教师') || lower.includes('指导') || lower.includes('teacher')) teacherCol = i;
+    if (lower.includes('手机号') || lower.includes('mobile') || lower.includes('phone') || lower.includes('飞书')) mobileCol = i;
     if (lower.includes('学号') || lower.includes('id') || lower.includes('编号')) idCol = i;
     if (lower.includes('姓名') || lower.includes('name') || lower.includes('学生')) nameCol = i;
   });
@@ -1606,18 +1618,22 @@ function parseTableFormat(rows) {
       if (!i0) continue;
       let club = c0; if (!club) club = lastClub;
       let tch = teacherCol >= 0 ? String(row[teacherCol] == null ? '' : row[teacherCol]).trim() : ''; if (!tch) tch = lastTeacher;
+      let mob = mobileCol >= 0 ? String(row[mobileCol] == null ? '' : row[mobileCol]).trim() : '';
       lastClub = club || lastClub; lastTeacher = tch || lastTeacher;
-      items.push({ clubName: club, teacher: tch, studentId: i0, studentName: n0 });
+      items.push({ clubName: club, teacher: tch, feishuMobile: mob, studentId: i0, studentName: n0 });
     }
   } else {
     // 无表头，按列顺序
     const startIdx = (headers.some(h => /社团|学号|姓名|老师|teacher|name|id|club/i.test(h || ''))) ? 1 : 0;
     for (let i = startIdx; i < rows.length; i++) {
       const row = rows[i];
-      if (row.length >= 4) {
-        items.push({ clubName: String(row[0]).trim(), teacher: String(row[1]).trim(), studentId: String(row[2]).trim(), studentName: String(row[3]).trim() });
+      if (row.length >= 5) {
+        // 5列：社团名,老师,手机号,学号,姓名
+        items.push({ clubName: String(row[0]).trim(), teacher: String(row[1]).trim(), feishuMobile: String(row[2]).trim(), studentId: String(row[3]).trim(), studentName: String(row[4]).trim() });
+      } else if (row.length === 4) {
+        items.push({ clubName: String(row[0]).trim(), teacher: String(row[1]).trim(), feishuMobile: '', studentId: String(row[2]).trim(), studentName: String(row[3]).trim() });
       } else if (row.length === 3) {
-        items.push({ clubName: String(row[0]).trim(), teacher: '', studentId: String(row[1]).trim(), studentName: String(row[2]).trim() });
+        items.push({ clubName: String(row[0]).trim(), teacher: '', feishuMobile: '', studentId: String(row[1]).trim(), studentName: String(row[2]).trim() });
       }
     }
   }
