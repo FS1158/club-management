@@ -62,6 +62,13 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   window.scrollTo(0, 0);
+  // 登录页在飞书环境下显示飞书登录按钮
+  if (page === 'login') {
+    const feishuBtn = document.getElementById('feishuLoginBtn');
+    if (feishuBtn && isFeishuEnv()) {
+      feishuBtn.style.display = 'block';
+    }
+  }
 }
 
 function closeModal(id, event) {
@@ -193,7 +200,7 @@ function redirectToFeishuAuth(appId) {
     + '?app_id=' + encodeURIComponent(appId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
     + '&state=' + encodeURIComponent(state)
-    + '&scope=' + encodeURIComponent('openid profile email');
+    ;
   window.location.href = authUrl;
 }
 
