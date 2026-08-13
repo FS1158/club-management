@@ -360,6 +360,54 @@
       <div id="searchResultSummary" class="search-summary"></div>
       <div id="searchResults" class="search-results"></div>
     </div>
+
+    <!-- ========== 学生考勤详情页（公开只读，免登录） ========== -->
+    <div id="page-student-detail" class="page">
+      <header class="app-header">
+        <button class="btn-icon" onclick="goBackToSearch()" aria-label="返回">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h1>学生考勤</h1>
+        <div class="btn-icon" style="visibility:hidden;"></div>
+      </header>
+      <div class="detail-content">
+        <div class="card">
+          <div class="attendance-header">
+            <h3>学生信息</h3>
+          </div>
+          <div class="card-row">
+            <span class="card-label">姓名</span>
+            <span id="sdStudentName" class="card-value"></span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">学号</span>
+            <span id="sdStudentId" class="card-value"></span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">所在社团</span>
+            <span id="sdClubName" class="card-value"></span>
+          </div>
+          <div class="card-row">
+            <span class="card-label">指导老师</span>
+            <span id="sdTeacher" class="card-value"></span>
+          </div>
+        </div>
+
+        <div class="card attendance-highlight-card">
+          <div class="attendance-header">
+            <h3 class="attendance-highlight-title">📊 考勤统计</h3>
+          </div>
+          <div id="sdSummary" class="attendance-summary"></div>
+        </div>
+
+        <div class="card">
+          <div class="attendance-header">
+            <h3>📝 考勤记录</h3>
+          </div>
+          <div id="sdDateList" class="date-list"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ========== 模态框 ========== -->
