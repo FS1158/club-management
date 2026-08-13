@@ -280,6 +280,26 @@ select.login-input {
   background: rgba(255,255,255,0.1);
 }
 
+/* 飞书登录按钮 */
+.btn-feishu-login {
+  width: 100%;
+  background: #3370ff;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: all 0.15s;
+}
+
+.btn-feishu-login:active {
+  background: #2860e0;
+}
+
 /* ===== 访客申请弹窗：加载圈 ===== */
 .spinner {
   width: 28px;

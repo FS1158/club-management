@@ -197,6 +197,19 @@ function redirectToFeishuAuth(appId) {
   window.location.href = authUrl;
 }
 
+// 手动触发飞书登录（用户点击按钮）
+function manualFeishuLogin() {
+  sessionStorage.removeItem('feishu_auth_attempted');
+  getFeishuConfig().then(config => {
+    if (config.enabled && config.appId) {
+      sessionStorage.setItem('feishu_auth_attempted', '1');
+      redirectToFeishuAuth(config.appId);
+    } else {
+      showToast('飞书登录未启用');
+    }
+  }).catch(() => showToast('飞书登录配置异常'));
+}
+
 // 飞书免登核心逻辑：用 code 换取系统 token
 async function feishuAutoLogin(code) {
   try {
@@ -206,6 +219,7 @@ async function feishuAutoLogin(code) {
     if (data.error) {
       console.error('[飞书] 免登失败:', data.error);
       showToast('飞书登录失败，请手动登录');
+      // 失败时保留 attempted 标记，避免自动重定向死循环
       return false;
     }
 
@@ -227,6 +241,7 @@ async function feishuAutoLogin(code) {
         // 管理员免登成功，adminFeishuMobile 就是当前用户手机号
         localStorage.setItem('adminFeishuMobile', data.feishuUser.mobile || '');
       }
+      sessionStorage.removeItem('feishu_auth_attempted');
       showToast('飞书免登成功');
       enterAdmin();
       return true;
@@ -236,6 +251,7 @@ async function feishuAutoLogin(code) {
       userClubId = data.clubId;
       localStorage.setItem('userClubId', userClubId);
       currentClubId = data.clubId;
+      sessionStorage.removeItem('feishu_auth_attempted');
       showToast('飞书免登成功：' + (data.clubName || ''));
       await loadClubDetail();
       navigateTo('detail');
@@ -1875,14 +1891,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // 3. 没有有效 token，检查是否在飞书环境且飞书已启用
   if (isFeishuEnv()) {
-    try {
-      const config = await getFeishuConfig();
-      if (config.enabled && config.appId) {
-        // 重定向到飞书授权
-        redirectToFeishuAuth(config.appId);
-        return;
-      }
-    } catch (e) {}
+    // 防重定向：如果已经尝试过授权但失败了，就不再自动重定向，避免死循环
+    const feishuAttempted = sessionStorage.getItem('feishu_auth_attempted');
+    if (!feishuAttempted) {
+      try {
+        const config = await getFeishuConfig();
+        if (config.enabled && config.appId) {
+          sessionStorage.setItem('feishu_auth_attempted', '1');
+          // 重定向到飞书授权
+          redirectToFeishuAuth(config.appId);
+          return;
+        }
+      } catch (e) {}
+    }
   }
 
   // 4. 都不满足，显示登录页
