@@ -581,6 +581,84 @@ function goBackFromSearch() {
   }
 }
 
+// ============ 学生考勤详情（公开只读，免登录） ============
+// 搜索页为免登录场景，点击学生直接打开只读考勤，不触发任何需要鉴权的接口，
+// 因此不会因空 token 收到 401 而被踢回登录页。
+
+let sdClub = null;        // 当前查看的社团（来自公开接口 /api/clubs/:id）
+let sdStudentId = null;   // 当前查看的学生学号
+
+async function openStudentDetail(clubId, studentId) {
+  try {
+    const res = await fetch(API + '/api/clubs/' + clubId);
+    if (!res.ok) { showToast('未找到该社团'); return; }
+    sdClub = await res.json();
+    sdStudentId = studentId;
+    renderStudentDetail();
+    navigateTo('student-detail');
+  } catch (e) {
+    showToast('加载失败');
+  }
+}
+
+function renderStudentDetail() {
+  if (!sdClub) return;
+  const student = (sdClub.students || []).find(s => s.id === sdStudentId);
+  if (!student) { showToast('未找到该学生'); navigateTo('search'); return; }
+
+  document.getElementById('sdStudentName').textContent = student.name || '';
+  document.getElementById('sdStudentId').textContent = student.id || '';
+  document.getElementById('sdClubName').textContent = sdClub.name || '';
+  document.getElementById('sdTeacher').textContent = sdClub.teacher || '未设置';
+
+  const dates = Object.keys(sdClub.attendance || {}).sort().reverse();
+  let present = 0, late = 0, absent = 0, unchecked = 0;
+
+  const rows = dates.map(date => {
+    const status = (sdClub.attendance[date] || {})[sdStudentId];
+    if (status === 'present') present++;
+    else if (status === 'late') late++;
+    else if (status === 'absent') absent++;
+    else unchecked++;
+    return renderSdDateRow(date, status);
+  });
+
+  document.getElementById('sdSummary').textContent =
+    `到勤 ${present} · 迟到 ${late} · 缺席 ${absent} · 未标记 ${unchecked}`;
+
+  const container = document.getElementById('sdDateList');
+  if (dates.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:30px 10px;"><p style="font-size:14px;">暂无考勤记录</p></div>`;
+  } else {
+    container.innerHTML = rows.join('');
+  }
+}
+
+function renderSdDateRow(date, status) {
+  const map = {
+    present: { text: '到勤', cls: 'detail-present' },
+    late:    { text: '迟到', cls: 'detail-late' },
+    absent:  { text: '缺席', cls: 'detail-absent' }
+  };
+  const info = map[status] || { text: '未标记', cls: 'detail-unchecked' };
+  return `
+    <div class="date-item">
+      <div class="date-info">
+        <span class="date-text">${formatDate(date)}</span>
+        <span class="date-badge">${getWeekday(date)}</span>
+      </div>
+      <div class="date-info">
+        <span class="attendance-detail-status ${info.cls}">${info.text}</span>
+      </div>
+    </div>
+  `;
+}
+
+// 从学生考勤详情返回搜索页（保持免登录搜索流程）
+function goBackToSearch() {
+  navigateTo('search');
+}
+
 function enterSearchPage() {
   document.getElementById('globalSearchInput').value = '';
   renderSearchResults([], '');
@@ -627,7 +705,7 @@ function renderSearchResults(results, keyword) {
   }
 
   container.innerHTML = results.map(r => `
-    <div class="search-result-item" onclick="navigateClub('${r.clubId}')">
+    <div class="search-result-item" onclick="openStudentDetail('${r.clubId}', '${r.studentId}')">
       <div class="search-result-header">
         <span class="search-result-name">${escapeHtml(r.studentName)}</span>
         <span class="search-result-id">${escapeHtml(r.studentId)}</span>
