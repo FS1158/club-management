@@ -471,6 +471,10 @@ app.get('/api/feishu/auth', async (req, res) => {
     };
 
     console.log('[飞书] 免登用户:', JSON.stringify(feishuUser));
+
+    // 4. 匹配系统角色
+    const data = loadData();
+
     lastFeishuDebug = {
       time: new Date().toISOString(),
       feishuUser: feishuUser,
@@ -479,9 +483,6 @@ app.get('/api/feishu/auth', async (req, res) => {
       feishuMobileNorm: normalizeMobile(feishuUser.mobile),
       step: 'got_user_info'
     };
-
-    // 4. 匹配系统角色
-    const data = loadData();
 
     // 4.1 优先匹配管理员（手机号，标准化后比较）
     const feishuMobileNorm = normalizeMobile(feishuUser.mobile);
