@@ -354,6 +354,9 @@ app.post('/api/logout', (req, res) => {
 
 // ============ 飞书免登 ============
 
+// 记录最近一次飞书免登的调试信息（用于排查问题）
+let lastFeishuDebug = null;
+
 // 手机号标准化：去掉 +86、空格、横线等，统一为纯数字
 function normalizeMobile(mobile) {
   if (!mobile) return '';
@@ -369,6 +372,11 @@ app.get('/api/feishu/config', (req, res) => {
     enabled: FEISHU_ENABLED,
     appId: FEISHU_APP_ID
   });
+});
+
+// 调试接口：查看最近一次飞书免登的详细信息
+app.get('/api/debug/feishu-last', (req, res) => {
+  res.json({ lastFeishuDebug });
 });
 
 // 调试接口：查看环境变量是否正确传递
@@ -450,7 +458,15 @@ app.get('/api/feishu/auth', async (req, res) => {
       avatar: userInfoData.data.avatar_url || ''
     };
 
-    console.log('[飞书] 免登用户:', feishuUser.name, feishuUser.mobile);
+    console.log('[飞书] 免登用户:', JSON.stringify(feishuUser));
+    lastFeishuDebug = {
+      time: new Date().toISOString(),
+      feishuUser: feishuUser,
+      adminMobile: data.settings.adminFeishuMobile || '',
+      adminMobileNorm: normalizeMobile(data.settings.adminFeishuMobile),
+      feishuMobileNorm: normalizeMobile(feishuUser.mobile),
+      step: 'got_user_info'
+    };
 
     // 4. 匹配系统角色
     const data = loadData();
@@ -468,6 +484,8 @@ app.get('/api/feishu/auth', async (req, res) => {
         feishuUser
       });
     }
+
+    lastFeishuDebug.step = 'admin_not_matched';
 
     // 4.2 匹配社团老师（优先手机号，其次姓名）
     if (feishuMobileNorm) {
@@ -488,6 +506,8 @@ app.get('/api/feishu/auth', async (req, res) => {
       }
     }
 
+    lastFeishuDebug.step = 'teacher_mobile_not_matched';
+
     // 4.3 手机号没匹配到，尝试按姓名匹配（仅当该社团没配手机号时）
     if (feishuUser.name) {
       const clubByName = data.clubs.find(c =>
@@ -507,10 +527,15 @@ app.get('/api/feishu/auth', async (req, res) => {
       }
     }
 
+    lastFeishuDebug.step = 'teacher_name_not_matched';
+    lastFeishuDebug.clubsCount = data.clubs.length;
+    lastFeishuDebug.clubs = data.clubs.map(c => ({ name: c.name, teacher: c.teacher, feishuMobile: c.feishuMobile }));
+
     // 4.4 都没匹配到，返回 needBind，前端提示联系管理员
     return res.json({
       needBind: true,
       feishuUser,
+      debug: lastFeishuDebug,
       message: '您还未绑定社团，请联系管理员在系统中设置您的手机号'
     });
 
