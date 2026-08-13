@@ -192,7 +192,8 @@ function redirectToFeishuAuth(appId) {
   const authUrl = 'https://open.feishu.cn/open-apis/authen/v1/authorize'
     + '?app_id=' + encodeURIComponent(appId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
-    + '&state=' + encodeURIComponent(state);
+    + '&state=' + encodeURIComponent(state)
+    + '&scope=' + encodeURIComponent('openid profile email mobile');
   window.location.href = authUrl;
 }
 

@@ -404,6 +404,12 @@ app.get('/api/feishu/auth', async (req, res) => {
   }
 
   try {
+    lastFeishuDebug = {
+      time: new Date().toISOString(),
+      code: code ? code.substring(0, 10) + '...' : 'empty',
+      step: 'start'
+    };
+
     // 1. 获取 tenant_access_token
     const tenantTokenRes = await fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
       method: 'POST',
@@ -415,8 +421,10 @@ app.get('/api/feishu/auth', async (req, res) => {
     });
     const tenantTokenData = await tenantTokenRes.json();
     if (tenantTokenData.code !== 0 || !tenantTokenData.tenant_access_token) {
-      console.error('[飞书] 获取 tenant_access_token 失败:', tenantTokenData);
-      return res.status(500).json({ error: '飞书认证失败：获取应用凭证失败' });
+      console.error('[飞书] 获取 tenant_access_token 失败:', JSON.stringify(tenantTokenData));
+      lastFeishuDebug.step = 'tenant_token_failed';
+      lastFeishuDebug.tenantError = tenantTokenData;
+      return res.status(500).json({ error: '飞书认证失败：获取应用凭证失败', debug: lastFeishuDebug });
     }
     const tenantAccessToken = tenantTokenData.tenant_access_token;
 
@@ -434,8 +442,10 @@ app.get('/api/feishu/auth', async (req, res) => {
     });
     const userTokenData = await userTokenRes.json();
     if (userTokenData.code !== 0 || !userTokenData.data?.access_token) {
-      console.error('[飞书] 换取 user_access_token 失败:', userTokenData);
-      return res.status(401).json({ error: '飞书认证失败：授权码无效或已过期' });
+      console.error('[飞书] 换取 user_access_token 失败:', JSON.stringify(userTokenData));
+      lastFeishuDebug.step = 'user_token_failed';
+      lastFeishuDebug.userTokenError = userTokenData;
+      return res.status(401).json({ error: '飞书认证失败：授权码无效或已过期', debug: lastFeishuDebug });
     }
     const userAccessToken = userTokenData.data.access_token;
 
@@ -446,8 +456,10 @@ app.get('/api/feishu/auth', async (req, res) => {
     });
     const userInfoData = await userInfoRes.json();
     if (userInfoData.code !== 0 || !userInfoData.data) {
-      console.error('[飞书] 获取用户信息失败:', userInfoData);
-      return res.status(500).json({ error: '飞书认证失败：获取用户信息失败' });
+      console.error('[飞书] 获取用户信息失败:', JSON.stringify(userInfoData));
+      lastFeishuDebug.step = 'user_info_failed';
+      lastFeishuDebug.userInfoError = userInfoData;
+      return res.status(500).json({ error: '飞书认证失败：获取用户信息失败', debug: lastFeishuDebug });
     }
 
     const feishuUser = {
@@ -541,7 +553,9 @@ app.get('/api/feishu/auth', async (req, res) => {
 
   } catch (err) {
     console.error('[飞书] 免登异常:', err);
-    return res.status(500).json({ error: '飞书认证异常：' + err.message });
+    if (lastFeishuDebug) lastFeishuDebug.step = 'exception';
+    if (lastFeishuDebug) lastFeishuDebug.exception = err.message;
+    return res.status(500).json({ error: '飞书认证异常：' + err.message, debug: lastFeishuDebug });
   }
 });
 
