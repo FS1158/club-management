@@ -10,8 +10,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============ 飞书配置 ============
-const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
-const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
+// 优先读环境变量，没有则使用内置默认值（解决 Railway 环境变量传递问题）
+const FEISHU_APP_ID = process.env.FEISHU_APP_ID || 'cli_aafaac367c789cc4';
+const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '5BrMpU3W8ZjbZ8hktPrcacaBzWCLWTLI';
 const FEISHU_ENABLED = !!(FEISHU_APP_ID && FEISHU_APP_SECRET);
 
 app.use(cors());
