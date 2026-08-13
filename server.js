@@ -361,6 +361,19 @@ app.get('/api/feishu/config', (req, res) => {
   });
 });
 
+// 调试接口：查看环境变量是否正确传递
+app.get('/api/debug/env', (req, res) => {
+  const allKeys = Object.keys(process.env).sort();
+  res.json({
+    feishuAppIdLength: process.env.FEISHU_APP_ID ? process.env.FEISHU_APP_ID.length : 0,
+    feishuAppSecretLength: process.env.FEISHU_APP_SECRET ? process.env.FEISHU_APP_SECRET.length : 0,
+    feishuAppId: process.env.FEISHU_APP_ID || '',
+    hasFeishuAppId: !!process.env.FEISHU_APP_ID,
+    hasFeishuAppSecret: !!process.env.FEISHU_APP_SECRET,
+    allEnvKeys: allKeys
+  });
+});
+
 // 飞书免登回调：用 code 换取用户信息，匹配角色，返回系统 token
 app.get('/api/feishu/auth', async (req, res) => {
   if (!FEISHU_ENABLED) {
