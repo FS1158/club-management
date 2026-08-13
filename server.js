@@ -9,6 +9,11 @@ const archiver = require('archiver');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ============ 飞书配置 ============
+const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
+const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
+const FEISHU_ENABLED = !!(FEISHU_APP_ID && FEISHU_APP_SECRET);
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -183,6 +188,14 @@ function initData() {
     if (!data.settings) {
       data.settings = { appName: '清华附中初中社团管理系统', adminPassword: 'admin123' };
     }
+    // 飞书免登：管理员手机号字段
+    if (data.settings.adminFeishuMobile === undefined) {
+      data.settings.adminFeishuMobile = '';
+    }
+    // 飞书免登：社团老师手机号字段
+    data.clubs.forEach(c => {
+      if (c.feishuMobile === undefined) c.feishuMobile = '';
+    });
     saveData(data);
   }
 }
@@ -311,7 +324,7 @@ app.post('/api/login/admin', (req, res) => {
   }
   const token = generateToken();
   sessions.set(token, { role: 'admin' });
-  res.json({ token, role: 'admin' });
+  res.json({ token, role: 'admin', adminFeishuMobile: data.settings.adminFeishuMobile || '' });
 });
 
 // 教师登录
@@ -336,6 +349,147 @@ app.post('/api/logout', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (token) sessions.delete(token);
   res.json({ success: true });
+});
+
+// ============ 飞书免登 ============
+
+// 获取飞书配置（公开）：前端判断是否启用飞书免登
+app.get('/api/feishu/config', (req, res) => {
+  res.json({
+    enabled: FEISHU_ENABLED,
+    appId: FEISHU_APP_ID
+  });
+});
+
+// 飞书免登回调：用 code 换取用户信息，匹配角色，返回系统 token
+app.get('/api/feishu/auth', async (req, res) => {
+  if (!FEISHU_ENABLED) {
+    return res.status(400).json({ error: '飞书免登未启用，请配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET' });
+  }
+
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).json({ error: '缺少 code 参数' });
+  }
+
+  try {
+    // 1. 获取 tenant_access_token
+    const tenantTokenRes = await fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        app_id: FEISHU_APP_ID,
+        app_secret: FEISHU_APP_SECRET
+      })
+    });
+    const tenantTokenData = await tenantTokenRes.json();
+    if (tenantTokenData.code !== 0 || !tenantTokenData.tenant_access_token) {
+      console.error('[飞书] 获取 tenant_access_token 失败:', tenantTokenData);
+      return res.status(500).json({ error: '飞书认证失败：获取应用凭证失败' });
+    }
+    const tenantAccessToken = tenantTokenData.tenant_access_token;
+
+    // 2. 用 code 换 user_access_token
+    const userTokenRes = await fetch('https://open.feishu.cn/open-apis/authen/v1/oidc/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + tenantAccessToken
+      },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code: code
+      })
+    });
+    const userTokenData = await userTokenRes.json();
+    if (userTokenData.code !== 0 || !userTokenData.data?.access_token) {
+      console.error('[飞书] 换取 user_access_token 失败:', userTokenData);
+      return res.status(401).json({ error: '飞书认证失败：授权码无效或已过期' });
+    }
+    const userAccessToken = userTokenData.data.access_token;
+
+    // 3. 获取用户信息
+    const userInfoRes = await fetch('https://open.feishu.cn/open-apis/authen/v1/user_info', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + userAccessToken }
+    });
+    const userInfoData = await userInfoRes.json();
+    if (userInfoData.code !== 0 || !userInfoData.data) {
+      console.error('[飞书] 获取用户信息失败:', userInfoData);
+      return res.status(500).json({ error: '飞书认证失败：获取用户信息失败' });
+    }
+
+    const feishuUser = {
+      name: userInfoData.data.name || '',
+      mobile: userInfoData.data.mobile || '',
+      email: userInfoData.data.email || '',
+      openId: userInfoData.data.open_id || '',
+      avatar: userInfoData.data.avatar_url || ''
+    };
+
+    console.log('[飞书] 免登用户:', feishuUser.name, feishuUser.mobile);
+
+    // 4. 匹配系统角色
+    const data = loadData();
+
+    // 4.1 优先匹配管理员（手机号）
+    if (feishuUser.mobile && data.settings.adminFeishuMobile &&
+        feishuUser.mobile === data.settings.adminFeishuMobile) {
+      const token = generateToken();
+      sessions.set(token, { role: 'admin' });
+      return res.json({
+        token,
+        role: 'admin',
+        feishuUser
+      });
+    }
+
+    // 4.2 匹配社团老师（优先手机号，其次姓名）
+    if (feishuUser.mobile) {
+      const clubByMobile = data.clubs.find(c => c.feishuMobile && c.feishuMobile === feishuUser.mobile);
+      if (clubByMobile) {
+        const token = generateToken();
+        sessions.set(token, { role: 'teacher', clubId: clubByMobile.id });
+        return res.json({
+          token,
+          role: 'teacher',
+          clubId: clubByMobile.id,
+          clubName: clubByMobile.name,
+          feishuUser
+        });
+      }
+    }
+
+    // 4.3 手机号没匹配到，尝试按姓名匹配（仅当该社团没配手机号时）
+    if (feishuUser.name) {
+      const clubByName = data.clubs.find(c =>
+        c.teacher && c.teacher === feishuUser.name &&
+        (!c.feishuMobile || c.feishuMobile === '')
+      );
+      if (clubByName) {
+        const token = generateToken();
+        sessions.set(token, { role: 'teacher', clubId: clubByName.id });
+        return res.json({
+          token,
+          role: 'teacher',
+          clubId: clubByName.id,
+          clubName: clubByName.name,
+          feishuUser
+        });
+      }
+    }
+
+    // 4.4 都没匹配到，返回 needBind，前端提示联系管理员
+    return res.json({
+      needBind: true,
+      feishuUser,
+      message: '您还未绑定社团，请联系管理员在系统中设置您的手机号'
+    });
+
+  } catch (err) {
+    console.error('[飞书] 免登异常:', err);
+    return res.status(500).json({ error: '飞书认证异常：' + err.message });
+  }
 });
 
 // ============ 需要权限的接口 ============
@@ -370,6 +524,10 @@ app.put('/api/clubs/:id', authMiddleware('teacher'), (req, res) => {
 
   if (req.body.name !== undefined) club.name = req.body.name;
   if (req.body.teacher !== undefined) club.teacher = req.body.teacher;
+  // 飞书免登：老师手机号（管理员或本社团教师都可设置）
+  if (req.body.feishuMobile !== undefined) {
+    club.feishuMobile = String(req.body.feishuMobile).trim();
+  }
   // 只有管理员能改PIN
   if (req.body.pin !== undefined && req.session.role === 'admin') {
     club.pin = req.body.pin;
@@ -769,11 +927,15 @@ app.put('/api/admin/password', authMiddleware('admin'), (req, res) => {
   res.json({ success: true });
 });
 
-// 管理员：修改系统名称
+// 管理员：修改系统设置
 app.put('/api/admin/settings', authMiddleware('admin'), (req, res) => {
   const data = loadData();
   if (req.body.appName) data.settings.appName = req.body.appName;
   if (req.body.adminPassword) data.settings.adminPassword = req.body.adminPassword;
+  // 飞书免登：管理员手机号
+  if (req.body.adminFeishuMobile !== undefined) {
+    data.settings.adminFeishuMobile = String(req.body.adminFeishuMobile).trim();
+  }
   saveData(data);
   res.json({ success: true });
 });
@@ -1116,6 +1278,7 @@ app.get('*', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`清华附中社团管理系统已启动: http://localhost:${PORT}`);
   console.log(`管理员默认密码: admin123`);
+  console.log(`飞书免登: ${FEISHU_ENABLED ? '已启用 (App ID: ' + FEISHU_APP_ID + ')' : '未启用（配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET 后启用）'}`);
   // 启动自检：data.json 损坏则自动从最新备份恢复
   startupIntegrityCheck();
   // 启动后不久做一份初始备份，确保随时有副本

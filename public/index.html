@@ -180,6 +180,12 @@
           <input type="password" id="confirmAdminPassword" placeholder="再次输入新密码" class="login-input" style="margin-bottom:12px;">
           <button class="btn-primary" onclick="changeAdminPassword()">确认修改</button>
         </div>
+        <div class="card" style="margin-top:12px;">
+          <h3>飞书免登设置</h3>
+          <p class="hint">设置管理员的飞书手机号后，在飞书内打开本应用可自动登录管理员</p>
+          <input type="tel" id="adminFeishuMobileInput" placeholder="管理员飞书手机号（如 13800138000）" class="login-input" style="margin-bottom:12px;">
+          <button class="btn-primary" onclick="saveAdminFeishuMobile()">保存手机号</button>
+        </div>
 
         <details class="card" style="margin-top:12px;">
           <summary style="cursor:pointer;font-size:13px;color:#888;">🛡️ 数据备份与恢复（仅出问题时使用）</summary>
@@ -225,6 +231,11 @@
             <span class="card-label">PIN码</span>
             <span id="clubPinDisplay" class="card-value"></span>
             <input id="clubPinInput" class="card-input hidden" type="text" maxlength="6">
+          </div>
+          <div class="card-row" id="feishuMobileRow">
+            <span class="card-label">老师手机号</span>
+            <span id="clubFeishuMobileDisplay" class="card-value"></span>
+            <input id="clubFeishuMobileInput" class="card-input hidden" type="tel" placeholder="飞书免登用，选填">
           </div>
           <div class="card-row">
             <span class="card-label">学生人数</span>

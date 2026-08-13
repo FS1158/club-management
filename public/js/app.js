@@ -107,6 +107,9 @@ async function adminLogin() {
     userRole = 'admin';
     localStorage.setItem('authToken', authToken);
     localStorage.setItem('userRole', userRole);
+    if (data.adminFeishuMobile !== undefined) {
+      localStorage.setItem('adminFeishuMobile', data.adminFeishuMobile);
+    }
 
     showToast('登录成功');
     enterAdmin();
@@ -163,6 +166,89 @@ function logout() {
   loadClubOptions();
 }
 
+// ============ 飞书免登 ============
+
+// 检测是否在飞书客户端内打开
+function isFeishuEnv() {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes('lark') || ua.includes('feishu') || ua.includes('byteview');
+}
+
+// 获取飞书配置（是否启用、App ID）
+async function getFeishuConfig() {
+  try {
+    const res = await fetch(API + '/api/feishu/config');
+    return await res.json();
+  } catch (e) {
+    return { enabled: false, appId: '' };
+  }
+}
+
+// 重定向到飞书授权页
+function redirectToFeishuAuth(appId) {
+  const redirectUri = window.location.origin + window.location.pathname;
+  const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  sessionStorage.setItem('feishu_state', state);
+  const authUrl = 'https://open.feishu.cn/open-apis/authen/v1/authorize'
+    + '?app_id=' + encodeURIComponent(appId)
+    + '&redirect_uri=' + encodeURIComponent(redirectUri)
+    + '&state=' + encodeURIComponent(state);
+  window.location.href = authUrl;
+}
+
+// 飞书免登核心逻辑：用 code 换取系统 token
+async function feishuAutoLogin(code) {
+  try {
+    const res = await fetch(API + '/api/feishu/auth?code=' + encodeURIComponent(code));
+    const data = await res.json();
+
+    if (data.error) {
+      console.error('[飞书] 免登失败:', data.error);
+      showToast('飞书登录失败，请手动登录');
+      return false;
+    }
+
+    if (data.needBind) {
+      // 匹配不到角色，提示联系管理员，但保留手动登录
+      const name = data.feishuUser?.name || '您';
+      showToast(name + ' 还未绑定社团，请联系管理员', 4000);
+      return false;
+    }
+
+    // 免登成功，保存 token
+    authToken = data.token;
+    userRole = data.role;
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('userRole', userRole);
+
+    if (data.role === 'admin') {
+      if (data.feishuUser) {
+        // 管理员免登成功，adminFeishuMobile 就是当前用户手机号
+        localStorage.setItem('adminFeishuMobile', data.feishuUser.mobile || '');
+      }
+      showToast('飞书免登成功');
+      enterAdmin();
+      return true;
+    }
+
+    if (data.role === 'teacher' && data.clubId) {
+      userClubId = data.clubId;
+      localStorage.setItem('userClubId', userClubId);
+      currentClubId = data.clubId;
+      showToast('飞书免登成功：' + (data.clubName || ''));
+      await loadClubDetail();
+      navigateTo('detail');
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    console.error('[飞书] 免登异常:', e);
+    showToast('飞书登录异常，请手动登录');
+    return false;
+  }
+}
+
 function onClubSelectChange() {}
 
 // ============ 管理员界面 ============
@@ -184,6 +270,7 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('adminTab-' + tab).classList.add('active');
   if (tab === 'resources') loadResourceClubs();
+  if (tab === 'settings') loadAdminFeishuMobile();
 }
 
 async function loadDashboard() {
@@ -768,6 +855,8 @@ function renderDetail() {
   document.getElementById('clubNameInput').value = currentClub.name;
   document.getElementById('clubTeacherInput').value = currentClub.teacher || '';
   document.getElementById('clubPinInput').value = currentClub.pin || '';
+  document.getElementById('clubFeishuMobileInput').value = currentClub.feishuMobile || '';
+  document.getElementById('clubFeishuMobileDisplay').textContent = currentClub.feishuMobile || '未设置';
 
   // PIN行仅管理员可见
   document.getElementById('pinRow').style.display = userRole === 'admin' ? '' : 'none';
@@ -872,6 +961,7 @@ function cancelEditMode() {
     document.getElementById('clubNameInput').value = currentClub.name;
     document.getElementById('clubTeacherInput').value = currentClub.teacher || '';
     document.getElementById('clubPinInput').value = currentClub.pin || '';
+    document.getElementById('clubFeishuMobileInput').value = currentClub.feishuMobile || '';
   }
   updateEditModeUI();
 }
@@ -887,6 +977,12 @@ function updateEditModeUI() {
   if (userRole === 'admin') {
     document.getElementById('clubPinDisplay').classList.toggle('hidden', isEditing);
     document.getElementById('clubPinInput').classList.toggle('hidden', !isEditing);
+  }
+
+  // 飞书手机号：管理员和本社团教师都可编辑
+  if (canEdit()) {
+    document.getElementById('clubFeishuMobileDisplay').classList.toggle('hidden', isEditing);
+    document.getElementById('clubFeishuMobileInput').classList.toggle('hidden', !isEditing);
   }
 
   document.getElementById('importSection').classList.toggle('hidden', !isEditing);
@@ -906,6 +1002,9 @@ async function saveClubInfo() {
   if (!name) { showToast('名称不能为空'); return; }
 
   const body = { name, teacher };
+  // 飞书手机号：管理员和本社团教师都可设置
+  const feishuMobile = document.getElementById('clubFeishuMobileInput').value.trim();
+  body.feishuMobile = feishuMobile;
   if (userRole === 'admin') {
     const pin = document.getElementById('clubPinInput').value.trim();
     if (pin) body.pin = pin;
@@ -1713,37 +1812,81 @@ function handleSSEMessage(msg) {
 
 // ============ 初始化 ============
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   loadClubOptions();
   connectSSE();
 
+  // 1. 先检查 URL 是否有飞书回调 code
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
 
-  // 检查已保存的管理员/教师登录状态
-  if (authToken && userRole) {
-    // 验证token是否仍然有效
-    fetch(API + '/api/auth/check', { headers: authHeaders() })
-      .then(res => {
-        if (res.ok) {
-          if (userRole === 'admin') enterAdmin();
-          else if (userRole === 'teacher') {
-            currentClubId = userClubId;
-            loadClubDetail().then(() => navigateTo('detail'));
-          }
-        } else {
-          logout();
-        }
-      })
-      .catch(() => {});
+  if (code) {
+    // 有 code，尝试飞书免登
+    await feishuAutoLogin(code);
+    // 清除 URL 上的 code 参数，避免刷新重复处理
+    window.history.replaceState({}, document.title, window.location.pathname);
+    // 绑定回车键登录（即使免登失败也需要）
+    bindLoginEnterKeys();
+    return;
   }
 
-  // 回车键登录
-  document.getElementById('adminPassword').addEventListener('keypress', e => {
-    if (e.key === 'Enter') adminLogin();
-  });
-  document.getElementById('teacherPin').addEventListener('keypress', e => {
-    if (e.key === 'Enter') teacherLogin();
-  });
+  // 2. 检查本地已有 token
+  if (authToken && userRole) {
+    try {
+      const res = await fetch(API + '/api/auth/check', { headers: authHeaders() });
+      if (res.ok) {
+        if (userRole === 'admin') {
+          enterAdmin();
+          bindLoginEnterKeys();
+          return;
+        }
+        if (userRole === 'teacher' && userClubId) {
+          currentClubId = userClubId;
+          await loadClubDetail();
+          navigateTo('detail');
+          bindLoginEnterKeys();
+          return;
+        }
+      }
+    } catch (e) {}
+    // token 无效，清除
+    authToken = ''; userRole = ''; userClubId = '';
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userClubId');
+  }
+
+  // 3. 没有有效 token，检查是否在飞书环境且飞书已启用
+  if (isFeishuEnv()) {
+    try {
+      const config = await getFeishuConfig();
+      if (config.enabled && config.appId) {
+        // 重定向到飞书授权
+        redirectToFeishuAuth(config.appId);
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // 4. 都不满足，显示登录页
+  navigateTo('login');
+  bindLoginEnterKeys();
 });
+
+function bindLoginEnterKeys() {
+  const adminPwd = document.getElementById('adminPassword');
+  const teacherPin = document.getElementById('teacherPin');
+  if (adminPwd) {
+    adminPwd.addEventListener('keypress', e => {
+      if (e.key === 'Enter') adminLogin();
+    });
+  }
+  if (teacherPin) {
+    teacherPin.addEventListener('keypress', e => {
+      if (e.key === 'Enter') teacherLogin();
+    });
+  }
+}
 
 // ============ 系统设置 ============
 
@@ -1772,6 +1915,40 @@ async function changeAdminPassword() {
   } catch (e) {
     showToast('修改失败');
   }
+}
+
+// 保存管理员飞书手机号
+async function saveAdminFeishuMobile() {
+  const mobile = document.getElementById('adminFeishuMobileInput').value.trim();
+  try {
+    const res = await apiFetch('/api/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ adminFeishuMobile: mobile })
+    });
+    const data = await res.json();
+    if (data.success) {
+      localStorage.setItem('adminFeishuMobile', mobile);
+      showToast(mobile ? '手机号保存成功' : '已清除手机号');
+    } else {
+      showToast(data.error || '保存失败');
+    }
+  } catch (e) {
+    showToast('保存失败');
+  }
+}
+
+// 加载管理员飞书手机号到输入框
+async function loadAdminFeishuMobile() {
+  try {
+    // 通过获取社团列表间接拿到 settings 不太方便，这里用一个简单方式：
+    // 调用 /api/settings 只能拿到 appName，所以我们需要另一个方式
+    // 实际上 adminFeishuMobile 保存在 settings 中，但公开接口不返回
+    // 我们可以在进入设置页时，通过一个已登录的接口获取
+    // 这里简化：保存时直接 PUT，加载时我们可以从 data 中读取
+    // 为了简单，我们在管理员登录时把 adminFeishuMobile 存到 localStorage
+    const saved = localStorage.getItem('adminFeishuMobile') || '';
+    document.getElementById('adminFeishuMobileInput').value = saved;
+  } catch (e) {}
 }
 
 // ============ 数据备份与恢复 ============
