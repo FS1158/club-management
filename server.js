@@ -354,6 +354,15 @@ app.post('/api/logout', (req, res) => {
 
 // ============ 飞书免登 ============
 
+// 手机号标准化：去掉 +86、空格、横线等，统一为纯数字
+function normalizeMobile(mobile) {
+  if (!mobile) return '';
+  let m = String(mobile).trim().replace(/[\s\-]/g, '');
+  if (m.startsWith('+86')) m = m.substring(3);
+  if (m.startsWith('86') && m.length > 11) m = m.substring(2);
+  return m;
+}
+
 // 获取飞书配置（公开）：前端判断是否启用飞书免登
 app.get('/api/feishu/config', (req, res) => {
   res.json({
@@ -446,9 +455,11 @@ app.get('/api/feishu/auth', async (req, res) => {
     // 4. 匹配系统角色
     const data = loadData();
 
-    // 4.1 优先匹配管理员（手机号）
-    if (feishuUser.mobile && data.settings.adminFeishuMobile &&
-        feishuUser.mobile === data.settings.adminFeishuMobile) {
+    // 4.1 优先匹配管理员（手机号，标准化后比较）
+    const feishuMobileNorm = normalizeMobile(feishuUser.mobile);
+    const adminMobileNorm = normalizeMobile(data.settings.adminFeishuMobile);
+    console.log('[飞书] 手机号匹配 - 飞书:', feishuUser.mobile, '->', feishuMobileNorm, '| 管理员:', data.settings.adminFeishuMobile, '->', adminMobileNorm);
+    if (feishuMobileNorm && adminMobileNorm && feishuMobileNorm === adminMobileNorm) {
       const token = generateToken();
       sessions.set(token, { role: 'admin' });
       return res.json({
@@ -459,8 +470,11 @@ app.get('/api/feishu/auth', async (req, res) => {
     }
 
     // 4.2 匹配社团老师（优先手机号，其次姓名）
-    if (feishuUser.mobile) {
-      const clubByMobile = data.clubs.find(c => c.feishuMobile && c.feishuMobile === feishuUser.mobile);
+    if (feishuMobileNorm) {
+      const clubByMobile = data.clubs.find(c => {
+        const clubMobileNorm = normalizeMobile(c.feishuMobile);
+        return clubMobileNorm && clubMobileNorm === feishuMobileNorm;
+      });
       if (clubByMobile) {
         const token = generateToken();
         sessions.set(token, { role: 'teacher', clubId: clubByMobile.id });
